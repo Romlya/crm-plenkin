@@ -1,0 +1,10 @@
+{
+  "name": "crm-plenkin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CRM ПЛЕНКИН",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": { "node": ">=18" }
+}
