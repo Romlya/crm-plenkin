@@ -16,3 +16,34 @@
 #linesTable input[type=number]{min-width:64px}
 #linesTable td:nth-child(2) input{width:72px}
 #linesTable td:nth-child(4) input,#linesTable td:nth-child(5) input{width:80px}
+
+/* Quick filter chips */
+.quick-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.qchip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 12px;border-radius:999px;border:1px solid var(--border);
+  background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;
+}
+.qchip:hover{border-color:rgba(232,197,71,.4)}
+.qchip.active{background:var(--gold-dim);border-color:var(--gold);color:var(--gold)}
+.qchip.danger.active,.qchip.danger:hover{border-color:var(--danger);color:var(--danger);background:rgba(232,93,93,.1)}
+.qchip.warn.active,.qchip.warn:hover{border-color:#e8a547;color:#e8a547;background:rgba(232,165,71,.1)}
+.qnum{
+  min-width:20px;height:20px;padding:0 6px;border-radius:999px;
+  background:rgba(255,255,255,.08);font-size:11px;display:inline-flex;align-items:center;justify-content:center;
+}
+.qchip.active .qnum{background:rgba(232,197,71,.2)}
+.debt-banner{
+  margin-bottom:12px;padding:10px 14px;border-radius:12px;
+  background:rgba(232,165,71,.1);border:1px solid rgba(232,165,71,.3);
+  font-size:13px;color:#e8a547;
+}
+.debt-banner strong{font-weight:800}
+.tag.debt{background:rgba(232,165,71,.18);color:#e8a547}
+.deal-row.has-debt{border-left:3px solid #e8a547}
+.stat-card.clickable{cursor:pointer}
+.stat-card.clickable:hover{border-color:rgba(232,197,71,.35)}
+.stat-card .sub{font-size:11px;color:var(--muted);margin-top:4px}
+.stat-card .value.danger{color:var(--danger)}
+.dash-chips{margin-bottom:16px}
+.filter-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
