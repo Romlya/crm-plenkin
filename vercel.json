@@ -3,7 +3,7 @@
   "buildCommand": null,
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
+    { "source": "/api/(.*)", "destination": "/api?__p=$1" }
   ],
   "headers": [
     {
