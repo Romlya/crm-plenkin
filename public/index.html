@@ -13,7 +13,7 @@
     <form class="login-card" id="loginForm">
       <div class="login-brand">ПЛЕНКИН</div>
       <h1>CRM</h1>
-      <p>Заявки, сметы, монтаж — в одном месте</p>
+      <p>Учёт заявок, смет и монтажей</p>
       <div class="field">
         <label>Логин</label>
         <input name="login" autocomplete="username" required placeholder="owner">
@@ -27,36 +27,77 @@
     </form>
   </div>
 
-  <div id="appView" class="hidden">
-    <header class="app-header">
-      <div class="app-header-inner">
-        <div class="brand">ПЛЕНКИН CRM</div>
-        <div class="user-chip"><span id="userLabel"></span></div>
-        <nav class="nav-tabs" id="navTabs">
-          <button type="button" data-tab="board" class="active">Канбан</button>
-          <button type="button" data-tab="installers">Монтажники</button>
-        </nav>
-        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Выйти</button>
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">ПЛЕНКИН</div>
+      <div class="sidebar-sub">CRM</div>
+      <nav class="sidebar-nav" id="sideNav">
+        <button type="button" data-page="dashboard" class="nav-item active">
+          <span class="nav-ico">▣</span> Дашборд
+        </button>
+        <button type="button" data-page="board" class="nav-item">
+          <span class="nav-ico">▤</span> Канбан
+        </button>
+        <button type="button" data-page="deals" class="nav-item">
+          <span class="nav-ico">☰</span> Сделки
+        </button>
+        <button type="button" data-page="installers" class="nav-item">
+          <span class="nav-ico">⚙</span> Монтажники
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="sidebar-user" id="sideUser"></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%">Выйти</button>
       </div>
-    </header>
+    </aside>
 
-    <main class="main">
-      <section id="tab-board">
-        <div class="board-toolbar">
-          <h1>Сделки</h1>
-          <button type="button" class="btn" id="newDealBtn">+ Заявка</button>
-        </div>
-        <div class="board" id="board"></div>
-      </section>
+    <div class="app-main">
+      <header class="topbar">
+        <button type="button" class="menu-btn" id="menuBtn" aria-label="Меню">☰</button>
+        <h1 class="topbar-title" id="pageTitle">Дашборд</h1>
+        <button type="button" class="btn btn-sm" id="newDealBtn">+ Заявка</button>
+      </header>
 
-      <section id="tab-installers" class="list-page hidden">
-        <div class="board-toolbar">
-          <h1>Монтажники</h1>
-        </div>
-        <div id="installerList"></div>
-      </section>
-    </main>
+      <div class="content">
+        <section id="page-dashboard" class="page">
+          <div class="stats" id="dashStats"></div>
+          <div class="panel">
+            <div class="panel-head"><h2>Воронка</h2></div>
+            <div class="funnel" id="dashFunnel"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Последние сделки</h2></div>
+            <div id="dashRecent" class="deal-list"></div>
+          </div>
+        </section>
+
+        <section id="page-board" class="page hidden">
+          <div class="board" id="board"></div>
+        </section>
+
+        <section id="page-deals" class="page hidden">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Все сделки</h2>
+              <select id="dealFilter" class="select-sm">
+                <option value="">Все этапы</option>
+              </select>
+            </div>
+            <div id="dealsList" class="deal-list"></div>
+          </div>
+        </section>
+
+        <section id="page-installers" class="page hidden">
+          <div class="panel">
+            <div class="panel-head"><h2>Взаиморасчёты с монтажниками</h2></div>
+            <div id="installerList"></div>
+          </div>
+        </section>
+      </div>
+    </div>
   </div>
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
 
   <div class="overlay" id="overlay"></div>
   <aside class="drawer" id="drawer">
