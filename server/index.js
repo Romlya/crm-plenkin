@@ -18,7 +18,7 @@ const MIME = {
 
 function serveStatic(req, res, urlPath) {
   let file = urlPath === '/' ? '/index.html' : urlPath;
-  file = path.normalize(file).replace(/^(\.\.[/\\])+/, '');
+  file = path.normalize(file).replace(/^(\.[./\\])+/, '');
   const full = path.join(PUBLIC, file);
   if (!full.startsWith(PUBLIC)) {
     res.statusCode = 403;
