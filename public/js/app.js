@@ -1,8 +1,8 @@
 (async () => {
   try {
-    const r = await fetch('/js/app-body.js');
-    const code = await r.text();
-    (0, eval)(code);
+    const a = await fetch('/js/app-body-p1.js').then((r) => r.text());
+    const b = await fetch('/js/app-body-p2.js').then((r) => r.text());
+    (0, eval)(a + b);
   } catch (e) {
     console.error(e);
     const el = document.getElementById('page-dashboard');
