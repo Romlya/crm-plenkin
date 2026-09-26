@@ -1,12 +1,8 @@
 (function(){
   try {
-    var b64 = (window.__APP_B||[]).join('');
-    if (!b64) throw new Error('Нет данных приложения');
-    var bin = atob(b64);
-    // UTF-8 decode
-    var bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    var code = new TextDecoder('utf-8').decode(bytes);
+    var parts = window.__SRC_PARTS || [];
+    var code = parts.join('');
+    if (!code) throw new Error('Нет кода приложения');
     (0, eval)(code);
   } catch (e) {
     console.error(e);
