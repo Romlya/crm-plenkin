@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-  <div id="loginView" class="login-page">
+  <div id="loginView" class="login-page hidden">
     <form class="login-card" id="loginForm">
       <div class="login-brand">ПЛЕНКИН</div>
       <h1>CRM</h1>
@@ -21,7 +21,7 @@
     </form>
   </div>
 
-  <div id="appView" class="app-shell hidden">
+  <div id="appView" class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">ПЛЕНКИН</div>
       <div class="sidebar-sub">CRM</div>
@@ -39,7 +39,7 @@
       </nav>
       <div class="sidebar-foot">
         <div class="sidebar-user" id="sideUser"></div>
-        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%">Выйти</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%;display:none">Выйти</button>
       </div>
     </aside>
 
