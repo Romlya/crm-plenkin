@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CRM ПЛЕНКИН</title>
+  <meta name="theme-color" content="#0b0c10">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <div id="loginView" class="login-page">
+    <form class="login-card" id="loginForm">
+      <div class="login-brand">ПЛЕНКИН</div>
+      <h1>CRM</h1>
+      <p>Заявки, сметы, монтаж — в одном месте</p>
+      <div class="field">
+        <label>Логин</label>
+        <input name="login" autocomplete="username" required placeholder="owner">
+      </div>
+      <div class="field">
+        <label>Пароль</label>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="error hidden" id="loginError"></div>
+      <button class="btn" type="submit" style="width:100%;margin-top:8px">Войти</button>
+    </form>
+  </div>
+
+  <div id="appView" class="hidden">
+    <header class="app-header">
+      <div class="app-header-inner">
+        <div class="brand">ПЛЕНКИН CRM</div>
+        <nav class="nav-tabs" id="navTabs">
+          <button type="button" data-tab="board" class="active">Канбан</button>
+          <button type="button" data-tab="installers" class="tab-mgr">Монтажники</button>
+        </nav>
+        <div class="user-chip"><span id="userLabel"></span></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn">Выйти</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section id="tab-board">
+        <div class="board-toolbar">
+          <h1>Сделки</h1>
+          <button type="button" class="btn" id="newDealBtn">+ Заявка</button>
+        </div>
+        <div class="board" id="board"></div>
+      </section>
+
+      <section id="tab-installers" class="list-page hidden">
+        <div class="board-toolbar">
+          <h1>Монтажники</h1>
+        </div>
+        <div id="installerList"></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head">
+      <h2 id="drawerTitle">Сделка</h2>
+      <button type="button" class="btn btn-ghost btn-sm" id="closeDrawer">Закрыть</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+    <div class="drawer-foot" id="drawerFoot"></div>
+  </aside>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
