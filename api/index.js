@@ -1,1 +1,1 @@
-PLACEHOLDER
+module.exports = require('../server/api-handler');
