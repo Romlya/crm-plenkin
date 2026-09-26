@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>CRM ПЛЕНКИН</title>
-  <meta name="theme-color" content="#0b0c10">
+  <meta name="theme-color" content="#090a0e">
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="/css/app.css">
 </head>
@@ -13,102 +13,62 @@
     <form class="login-card" id="loginForm">
       <div class="login-brand">ПЛЕНКИН</div>
       <h1>CRM</h1>
-      <p>Учёт заявок, смет и монтажей</p>
-      <div class="field">
-        <label>Логин</label>
-        <input name="login" autocomplete="username" required placeholder="owner">
-      </div>
-      <div class="field">
-        <label>Пароль</label>
-        <input name="password" type="password" autocomplete="current-password" required>
-      </div>
+      <p>Сделки \u00b7 клиенты \u00b7 финансы \u00b7 монтаж</p>
+      <div class="field"><label>Логин</label><input name="login" autocomplete="username" required placeholder="owner"></div>
+      <div class="field"><label>Пароль</label><input name="password" type="password" autocomplete="current-password" required></div>
       <div class="error hidden" id="loginError"></div>
       <button class="btn" type="submit" style="width:100%;margin-top:8px">Войти</button>
     </form>
   </div>
-
   <div id="appView" class="app-shell hidden">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">ПЛЕНКИН</div>
       <div class="sidebar-sub">CRM</div>
       <nav class="sidebar-nav" id="sideNav">
-        <button type="button" data-page="dashboard" class="nav-item active">
-          <span class="nav-ico">▣</span> Дашборд
-        </button>
-        <button type="button" data-page="board" class="nav-item">
-          <span class="nav-ico">▤</span> Канбан
-        </button>
-        <button type="button" data-page="deals" class="nav-item">
-          <span class="nav-ico">☰</span> Сделки
-        </button>
-        <button type="button" data-page="installers" class="nav-item">
-          <span class="nav-ico">⚙</span> Монтажники
-        </button>
+        <button type="button" data-page="dashboard" class="nav-item active">Дашборд</button>
+        <button type="button" data-page="board" class="nav-item">Канбан</button>
+        <button type="button" data-page="deals" class="nav-item">Сделки</button>
+        <button type="button" data-page="clients" class="nav-item mgr">Клиенты</button>
+        <button type="button" data-page="finance" class="nav-item mgr">Финансы</button>
+        <button type="button" data-page="materials" class="nav-item mgr">Плёнки</button>
+        <button type="button" data-page="installers" class="nav-item">Монтажники</button>
+        <button type="button" data-page="staff" class="nav-item own">Сотрудники</button>
+        <button type="button" data-page="settings" class="nav-item own">Настройки</button>
       </nav>
       <div class="sidebar-foot">
         <div class="sidebar-user" id="sideUser"></div>
         <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%">Выйти</button>
       </div>
     </aside>
-
     <div class="app-main">
       <header class="topbar">
         <button type="button" class="menu-btn" id="menuBtn" aria-label="Меню">☰</button>
         <h1 class="topbar-title" id="pageTitle">Дашборд</h1>
         <button type="button" class="btn btn-sm" id="newDealBtn">+ Заявка</button>
       </header>
-
       <div class="content">
-        <section id="page-dashboard" class="page">
-          <div class="stats" id="dashStats"></div>
-          <div class="panel">
-            <div class="panel-head"><h2>Воронка</h2></div>
-            <div class="funnel" id="dashFunnel"></div>
-          </div>
-          <div class="panel">
-            <div class="panel-head"><h2>Последние сделки</h2></div>
-            <div id="dashRecent" class="deal-list"></div>
-          </div>
-        </section>
-
-        <section id="page-board" class="page hidden">
-          <div class="board" id="board"></div>
-        </section>
-
-        <section id="page-deals" class="page hidden">
-          <div class="panel">
-            <div class="panel-head">
-              <h2>Все сделки</h2>
-              <select id="dealFilter" class="select-sm">
-                <option value="">Все этапы</option>
-              </select>
-            </div>
-            <div id="dealsList" class="deal-list"></div>
-          </div>
-        </section>
-
-        <section id="page-installers" class="page hidden">
-          <div class="panel">
-            <div class="panel-head"><h2>Взаиморасчёты с монтажниками</h2></div>
-            <div id="installerList"></div>
-          </div>
-        </section>
+        <section id="page-dashboard" class="page"></section>
+        <section id="page-board" class="page hidden"><div class="board" id="board"></div></section>
+        <section id="page-deals" class="page hidden"></section>
+        <section id="page-clients" class="page hidden"></section>
+        <section id="page-finance" class="page hidden"></section>
+        <section id="page-materials" class="page hidden"></section>
+        <section id="page-installers" class="page hidden"></section>
+        <section id="page-staff" class="page hidden"></section>
+        <section id="page-settings" class="page hidden"></section>
       </div>
     </div>
   </div>
-
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-
   <div class="overlay" id="overlay"></div>
   <aside class="drawer" id="drawer">
     <div class="drawer-head">
-      <h2 id="drawerTitle">Сделка</h2>
+      <h2 id="drawerTitle">Карточка</h2>
       <button type="button" class="btn btn-ghost btn-sm" id="closeDrawer">Закрыть</button>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
     <div class="drawer-foot" id="drawerFoot"></div>
   </aside>
-
   <script src="/js/app.js"></script>
 </body>
 </html>
