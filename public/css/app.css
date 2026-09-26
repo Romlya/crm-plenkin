@@ -297,7 +297,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .stage-chip{
   font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;
   background:var(--surface2);border:1px solid var(--border);color:var(--muted);
-  cursor:pointer;
+  cursor:pointer;line-height:1.2;
 }
 .stage-chip.active,.stage-chip:hover{background:var(--gold-dim);color:var(--gold);border-color:rgba(232,197,71,.35)}
 .card-debt{font-size:11px;color:var(--danger);font-weight:600;margin-left:6px}
@@ -309,4 +309,32 @@ button,input,select,textarea{font:inherit;color:inherit}
 .inst-deals{padding:0 8px 10px}
 .badge{font-size:11px;padding:3px 8px;border-radius:999px;background:var(--surface2);color:var(--muted);white-space:nowrap}
 .badge.warn{background:rgba(232,93,93,.15);color:var(--danger)}
+.fin-click{cursor:pointer}
 .fin-click:hover{background:rgba(255,255,255,.03)}
+
+/* Overdue */
+.deal-row.overdue,.card.overdue,.sched-row.overdue{border-left:3px solid var(--danger)}
+.tag.overdue{background:rgba(232,93,93,.18);color:var(--danger)}
+.date-hint.overdue-text,.overdue-text{color:var(--danger)!important}
+.panel-danger{border-color:rgba(232,93,93,.35)}
+.panel-danger .panel-head h2{color:var(--danger)}
+.stock-ok{color:var(--ok)!important;margin-top:8px}
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* Mobile drawer full-screen + sticky foot */
+@media (max-width:860px){
+  .drawer{width:100%;max-width:100%;border-left:0}
+  .drawer-foot{
+    position:sticky;bottom:0;background:var(--surface);
+    padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -8px 24px rgba(0,0,0,.35);z-index:2;
+  }
+  .drawer-body{padding-bottom:24px}
+  .topbar{padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  .content{padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .board{min-height:calc(100vh - var(--topbar-h) - 32px)}
+  .column{flex:0 0 min(85vw,280px);max-height:calc(100vh - var(--topbar-h) - 40px)}
+  .stage-chip{padding:8px 10px;font-size:10px}
+}
+.drawer-foot .btn{flex:1;min-width:120px}
+.drawer-foot .btn-ghost{flex:0 0 auto}
