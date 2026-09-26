@@ -60,13 +60,10 @@ const body = async (req) => {
   });
 };
 function auth(req) {
-  const c = cookies(req.headers && req.headers.cookie);
-  const authH = (req.headers && req.headers.authorization) || '';
-  const t = c[COOKIE] || authH.replace(/^Bearer\s+/i, '');
-  const d = verify(t);
-  if (!d) return null;
-  const u = store.get().users.find((x) => x.id === d.id && x.active);
-  return u ? { id: u.id, login: u.login, name: u.name, role: u.role } : null;
+  // Auth disabled for now — single user mode (owner)
+  const u = store.get().users.find((x) => x.role === 'owner' && x.active) || store.get().users[0];
+  if (!u) return { id: 'local', login: 'owner', name: 'Владелец', role: 'owner' };
+  return { id: u.id, login: u.login, name: u.name, role: u.role };
 }
 function moneyDeal(dealId) {
   const db = store.get();
@@ -103,23 +100,17 @@ module.exports = async function handler(req, res) {
     }
 
     if (method === 'POST' && p.indexOf('/api/login') === 0) {
-      const b = await body(req);
-      const u = store.get().users.find((x) => x.login === String(b.login || '').trim() && x.active);
-      if (!u || !verifyPassword(String(b.password || ''), u.password_hash)) {
-        return json(res, 401, { error: 'Неверный логин или пароль' });
-      }
-      const session = { id: u.id, login: u.login, name: u.name, role: u.role };
-      return json(res, 200, { user: session }, {
-        'Set-Cookie': COOKIE + '=' + encodeURIComponent(sign(session)) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + (14 * 86400),
-      });
+      const u = store.get().users.find((x) => x.role === 'owner' && x.active) || store.get().users[0];
+      const session = u ? { id: u.id, login: u.login, name: u.name, role: u.role } : { id: 'local', login: 'owner', name: 'Владелец', role: 'owner' };
+      return json(res, 200, { user: session });
     }
     if (method === 'POST' && p.indexOf('/api/logout') === 0) {
-      return json(res, 200, { ok: true }, { 'Set-Cookie': COOKIE + '=; Path=/; Max-Age=0' });
+      return json(res, 200, { ok: true });
     }
 
     const user = auth(req);
     if (!user) return json(res, 401, { error: 'Требуется вход' });
-    if (method === 'GET' && p.indexOf('/api/me') === 0) return json(res, 200, { user: user });
+    if (method === 'GET' && p.indexOf('/api/me') === 0) return json(res, 200, { user: user, stages: STAGES });
 
     if (method === 'GET' && p.indexOf('/api/board') === 0) {
       const db = store.get();
