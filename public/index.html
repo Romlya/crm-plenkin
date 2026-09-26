@@ -13,13 +13,14 @@
     <form class="login-card" id="loginForm">
       <div class="login-brand">ПЛЕНКИН</div>
       <h1>CRM</h1>
-      <p>Сделки \u00b7 клиенты \u00b7 финансы \u00b7 монтаж</p>
+      <p>Сделки · клиенты · финансы · монтаж · график</p>
       <div class="field"><label>Логин</label><input name="login" autocomplete="username" required placeholder="owner"></div>
       <div class="field"><label>Пароль</label><input name="password" type="password" autocomplete="current-password" required></div>
       <div class="error hidden" id="loginError"></div>
       <button class="btn" type="submit" style="width:100%;margin-top:8px">Войти</button>
     </form>
   </div>
+
   <div id="appView" class="app-shell hidden">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">ПЛЕНКИН</div>
@@ -27,10 +28,11 @@
       <nav class="sidebar-nav" id="sideNav">
         <button type="button" data-page="dashboard" class="nav-item active">Дашборд</button>
         <button type="button" data-page="board" class="nav-item">Канбан</button>
+        <button type="button" data-page="schedule" class="nav-item">График</button>
         <button type="button" data-page="deals" class="nav-item">Сделки</button>
         <button type="button" data-page="clients" class="nav-item mgr">Клиенты</button>
         <button type="button" data-page="finance" class="nav-item mgr">Финансы</button>
-        <button type="button" data-page="materials" class="nav-item mgr">Плёнки</button>
+        <button type="button" data-page="materials" class="nav-item mgr">Склад плёнок</button>
         <button type="button" data-page="installers" class="nav-item">Монтажники</button>
         <button type="button" data-page="staff" class="nav-item own">Сотрудники</button>
         <button type="button" data-page="settings" class="nav-item own">Настройки</button>
@@ -40,15 +42,21 @@
         <button type="button" class="btn btn-ghost btn-sm" id="logoutBtn" style="width:100%">Выйти</button>
       </div>
     </aside>
+
     <div class="app-main">
       <header class="topbar">
         <button type="button" class="menu-btn" id="menuBtn" aria-label="Меню">☰</button>
         <h1 class="topbar-title" id="pageTitle">Дашборд</h1>
+        <div class="search-wrap">
+          <input type="search" id="globalSearch" class="search-input" placeholder="Поиск…" autocomplete="off">
+          <div class="search-drop hidden" id="searchDrop"></div>
+        </div>
         <button type="button" class="btn btn-sm" id="newDealBtn">+ Заявка</button>
       </header>
       <div class="content">
         <section id="page-dashboard" class="page"></section>
         <section id="page-board" class="page hidden"><div class="board" id="board"></div></section>
+        <section id="page-schedule" class="page hidden"></section>
         <section id="page-deals" class="page hidden"></section>
         <section id="page-clients" class="page hidden"></section>
         <section id="page-finance" class="page hidden"></section>
@@ -59,6 +67,7 @@
       </div>
     </div>
   </div>
+
   <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
   <div class="overlay" id="overlay"></div>
   <aside class="drawer" id="drawer">
