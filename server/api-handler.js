@@ -1,8 +1,6 @@
 const crypto = require('crypto');
 const { verifyPassword, hashPassword } = require('./pass');
 const store = require('./store');
-const SECRET = process.env.CRM_JWT_SECRET || 'plenkin-crm-change-me-in-production-2026';
-const COOKIE = 'plenkin_token';
 const STAGES = [
   { id: 'lead', title: 'Заявка' },
   { id: 'measure', title: 'Замер' },
@@ -107,18 +105,12 @@ module.exports = async function handler(req, res) {
       return res.end();
     }
 
-    if (method === 'POST' && p.indexOf('/api/login') === 0) {
-      return json(res, 200, { user: auth() });
-    }
-    if (method === 'POST' && p.indexOf('/api/logout') === 0) {
-      return json(res, 200, { ok: true });
-    }
+    if (method === 'POST' && p.indexOf('/api/login') === 0) return json(res, 200, { user: auth() });
+    if (method === 'POST' && p.indexOf('/api/logout') === 0) return json(res, 200, { ok: true });
 
     const user = auth();
 
-    if (method === 'GET' && p.indexOf('/api/me') === 0) {
-      return json(res, 200, { user: user, stages: STAGES });
-    }
+    if (method === 'GET' && p.indexOf('/api/me') === 0) return json(res, 200, { user: user, stages: STAGES });
 
     if (method === 'GET' && p.indexOf('/api/board') === 0) {
       const db = store.get();
@@ -223,7 +215,16 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { deal: enrichDeal(store.get().deals.find((x) => x.id === dealId)) });
     }
 
-    if (method === 'GET' && p === '/api/clients') return json(res, 200, { clients: store.get().clients });
+    if (method === 'GET' && p === '/api/clients') {
+      const db = store.get();
+      const clients = db.clients.map((c) => {
+        const deals = db.deals.filter((d) => d.client_id === c.id);
+        let sum = 0;
+        for (const d of deals) sum += moneyDeal(d.id).client_total;
+        return Object.assign({}, c, { deals_count: deals.length, deals_sum: sum });
+      });
+      return json(res, 200, { clients: clients });
+    }
     if (method === 'POST' && p === '/api/clients') {
       const b = await body(req);
       const id = uuid();
@@ -266,9 +267,38 @@ module.exports = async function handler(req, res) {
       return json(res, 200, { material: store.get().materials.find((x) => x.id === matId) });
     }
 
+    if (method === 'POST' && p === '/api/users') {
+      const b = await body(req);
+      if (!b.login || !b.password || !b.name || !b.role) return json(res, 400, { error: 'Заполните поля' });
+      if (store.get().users.find((u) => u.login === b.login)) return json(res, 400, { error: 'Логин занят' });
+      const id = uuid();
+      store.write((db) => {
+        db.users.push({
+          id, login: b.login, password_hash: hashPassword(b.password),
+          name: b.name, role: b.role, phone: b.phone || '', active: 1,
+          created_at: new Date().toISOString(),
+        });
+      });
+      return json(res, 200, { ok: true, id: id });
+    }
+    const userId = pathId(p, '/api/users');
+    if (userId && method === 'PATCH') {
+      const b = await body(req);
+      store.write((db) => {
+        const u = db.users.find((x) => x.id === userId);
+        if (!u) return;
+        if (b.name !== undefined) u.name = b.name;
+        if (b.role !== undefined) u.role = b.role;
+        if (b.phone !== undefined) u.phone = b.phone;
+        if (b.active !== undefined) u.active = Number(b.active) ? 1 : 0;
+        if (b.password) u.password_hash = hashPassword(b.password);
+      });
+      return json(res, 200, { ok: true });
+    }
     if (method === 'GET' && p.indexOf('/api/users') === 0) {
       return json(res, 200, { users: store.get().users.map((u) => ({ id: u.id, login: u.login, name: u.name, role: u.role, phone: u.phone, active: u.active })) });
     }
+
     if (method === 'GET' && p.indexOf('/api/company') === 0) return json(res, 200, { company: store.get().company });
     if (method === 'PATCH' && p.indexOf('/api/company') === 0) {
       const b = await body(req);
