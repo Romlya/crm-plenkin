@@ -1,8 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const a = fs.readFileSync(path.join(__dirname, '_b64a.txt'), 'utf8');
-const b = fs.readFileSync(path.join(__dirname, '_b64b.txt'), 'utf8');
-const code = Buffer.from(a + b, 'base64').toString('utf8');
+const parts = ['_b64a_1.txt','_b64a_2.txt','_b64b_1.txt','_b64b_2.txt'].map(f => fs.readFileSync(path.join(__dirname, f), 'utf8'));
+const code = Buffer.from(parts.join(''), 'base64').toString('utf8');
 const Module = require('module');
 const m = new Module(__filename + '.rt');
 m.filename = __filename + '.rt';
