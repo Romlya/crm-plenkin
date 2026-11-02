@@ -45,6 +45,7 @@ export const ICONS = {
   sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
   box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   pause: '<rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/>',
+  wrench: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6a2.1 2.1 0 0 0 3 3l6-6a4 4 0 0 0 5.4-5.4l-2.3 2.3-2.7-2.7 2.3-2.3Z"/>',
 };
 
 export function icon(name, cls = '') {
@@ -280,4 +281,69 @@ export function methodLabel(method) {
 /** Склонение денег: 1 заказ / 2 заказа / 5 заказов */
 export function ordersWord(n) {
   return `${n} ${plural(n, ['заказ', 'заказа', 'заказов'])}`;
+}
+
+// ───────────────────────────── сумма прописью (для документов)
+
+const ONES_M = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+const ONES_F = ['', 'одна', 'две', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+const TEENS = ['десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать', 'пятнадцать', 'шестнадцать', 'семнадцать', 'восемнадцать', 'девятнадцать'];
+const TENS = ['', '', 'двадцать', 'тридцать', 'сорок', 'пятьдесят', 'шестьдесят', 'семьдесят', 'восемьдесят', 'девяносто'];
+const HUNDREDS = ['', 'сто', 'двести', 'триста', 'четыреста', 'пятьсот', 'шестьсот', 'семьсот', 'восемьсот', 'девятьсот'];
+
+function triadWords(value, feminine = false) {
+  const words = [];
+  const hundreds = Math.floor(value / 100);
+  const rest = value % 100;
+  if (hundreds) words.push(HUNDREDS[hundreds]);
+  if (rest >= 10 && rest < 20) {
+    words.push(TEENS[rest - 10]);
+  } else {
+    const tens = Math.floor(rest / 10);
+    const ones = rest % 10;
+    if (tens) words.push(TENS[tens]);
+    if (ones) words.push(feminine ? ONES_F[ones] : ONES_M[ones]);
+  }
+  return words.join(' ');
+}
+
+function numberToWords(value) {
+  const n = Math.floor(Number(value) || 0);
+  if (!n) return 'ноль';
+  const groups = [];
+  let rest = n;
+  while (rest > 0) {
+    groups.push(rest % 1000);
+    rest = Math.floor(rest / 1000);
+  }
+  const parts = [];
+  const groupNames = [
+    ['', '', ''],
+    ['тысяча', 'тысячи', 'тысяч'],
+    ['миллион', 'миллиона', 'миллионов'],
+    ['миллиард', 'миллиарда', 'миллиардов'],
+  ];
+  for (let index = groups.length - 1; index >= 0; index -= 1) {
+    const group = groups[index];
+    if (!group) continue;
+    const words = triadWords(group, index === 1);
+    if (index > 0) parts.push(`${words} ${plural(group, groupNames[index])}`);
+    else parts.push(words);
+  }
+  return parts.join(' ');
+}
+
+export function moneyInWords(value) {
+  const total = Math.round((Number(value) || 0) * 100);
+  const rubles = Math.floor(total / 100);
+  const kopecks = total % 100;
+  const words = numberToWords(rubles);
+  const rubWord = plural(rubles, ['рубль', 'рубля', 'рублей']);
+  const kopWord = plural(kopecks, ['копейка', 'копейки', 'копеек']);
+  const sentence = `${words} ${rubWord} ${String(kopecks).padStart(2, '0')} ${kopWord}`;
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+}
+
+export function fmtRub(value) {
+  return `${moneyFmt2.format(Number(value) || 0)} ₽`;
 }

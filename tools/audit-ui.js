@@ -138,6 +138,7 @@ async function main() {
   check(dataResponse.status === 200 && data.orders.length > 0, 'данные загружены', `orders=${data?.orders?.length}`);
 
   const orderId = data.orders.find((o) => o.status !== 'closed')?.id || data.orders[0].id;
+  const assignOrderId = data.orders.find((o) => !(o.installers || []).length)?.id || orderId;
   const clientId = data.clients[0].id;
 
   // ── браузер
@@ -259,9 +260,60 @@ async function main() {
       script: `return {
         kpi: document.querySelectorAll('.kpi').length,
         payments: document.querySelectorAll('[data-del-payment]').length,
+        docs: document.querySelectorAll('.doc-button').length,
+        estimate: Boolean(document.querySelector('[data-act="estimate"]')),
         status: Boolean(document.querySelector('[data-status]'))
       };`,
-      validate: (v) => v.kpi >= 4 && v.status && v.payments >= 1,
+      validate: (v) => v.kpi >= 4 && v.status && v.docs === 5 && v.estimate,
+    },
+    {
+      hash: '#/installers', name: 'installers', title: 'Монтажники',
+      script: `return {
+        rows: document.querySelectorAll('#view .list .row').length,
+        kpi: document.querySelectorAll('.kpi').length,
+        tabs: document.querySelectorAll('[data-tab-btn]').length
+      };`,
+      validate: (v) => v.rows >= 3 && v.kpi >= 4 && v.tabs === 2,
+    },
+    {
+      hash: `#/orders/${orderId}/doc/kp`, name: 'doc-kp', title: 'Документ КП',
+      script: `return {
+        pages: document.querySelectorAll('.doc-page').length,
+        text: document.querySelector('.doc-wrap')?.innerText.includes('Коммерческое предложение') || false
+      };`,
+      validate: (v) => v.pages === 3 && v.text,
+    },
+    {
+      hash: `#/orders/${orderId}/doc/smeta`, name: 'doc-smeta', title: 'Документ Смета',
+      script: `return {
+        pages: document.querySelectorAll('.doc-page').length,
+        text: document.querySelector('.doc-wrap')?.innerText.includes('Смета') || false
+      };`,
+      validate: (v) => v.pages === 1 && v.text,
+    },
+    {
+      hash: `#/orders/${orderId}/doc/invoice`, name: 'doc-invoice', title: 'Документ Счёт',
+      script: `return {
+        pages: document.querySelectorAll('.doc-page').length,
+        text: document.querySelector('.doc-wrap')?.innerText.includes('Счёт на оплату') || false
+      };`,
+      validate: (v) => v.pages === 1 && v.text,
+    },
+    {
+      hash: `#/orders/${orderId}/doc/act`, name: 'doc-act', title: 'Документ Акт',
+      script: `return {
+        pages: document.querySelectorAll('.doc-page').length,
+        text: document.querySelector('.doc-wrap')?.innerText.includes('Акт выполненных работ') || false
+      };`,
+      validate: (v) => v.pages === 1 && v.text,
+    },
+    {
+      hash: `#/orders/${orderId}/doc/warranty`, name: 'doc-warranty', title: 'Документ Гарантия',
+      script: `return {
+        pages: document.querySelectorAll('.doc-page').length,
+        text: document.querySelector('.doc-wrap')?.innerText.includes('Гарантийный талон') || false
+      };`,
+      validate: (v) => v.pages === 1 && v.text,
     },
     {
       hash: `#/clients/${clientId}`, name: 'client-detail', title: 'Клиент',
@@ -372,6 +424,52 @@ async function main() {
     flow = { ok: false };
   }
   check(flow.ok, 'Оплата: добавление из карточки заказа', flow.buttons);
+
+  // ── сценарий: назначить монтажника и выплату
+  await goto(`#/orders/${assignOrderId}`, 600);
+  flow = await cdp.evaluate(`
+    ${WAIT_HELPER}
+    const before = document.querySelectorAll('.assign-item').length;
+    document.querySelector('[data-act="assign"]').click();
+    await wait(() => document.querySelector('.modal [name="installerId"]'));
+    const form = document.querySelector('.modal form');
+    form.querySelector('[name="amount"]').value = '1500';
+    document.querySelector('.modal [data-act="submit"]').click();
+    await wait(() => !document.querySelector('.modal'), 6000);
+    await wait(() => document.querySelectorAll('.assign-item').length > before, 4000);
+    return { ok: true, after: document.querySelectorAll('.assign-item').length };
+  `);
+  check(flow.ok && flow.after > 0, 'Монтажник: назначение на заказ', `назначено ${flow.after}`);
+
+  flow = await cdp.evaluate(`
+    ${WAIT_HELPER}
+    document.querySelector('[data-act="payout"]').click();
+    await wait(() => document.querySelector('.modal [name="amount"]'));
+    const form = document.querySelector('.modal form');
+    form.querySelector('[name="amount"]').value = '500';
+    document.querySelector('.modal [data-act="submit"]').click();
+    await wait(() => !document.querySelector('.modal'), 6000);
+    await wait(() => document.querySelector('#view').innerText.replace(/\\u00A0/g, ' ').includes('500'), 4000);
+    return { ok: true };
+  `);
+  check(flow.ok, 'Выплата: создание из карточки заказа');
+
+  // ── сценарий: смета с дополнительными условиями
+  await goto(`#/orders/${orderId}`, 600);
+  flow = await cdp.evaluate(`
+    ${WAIT_HELPER}
+    document.querySelector('[data-act="estimate"]').click();
+    await wait(() => document.querySelector('.modal [data-row]'));
+    const discount = document.querySelector('#estimateDiscount');
+    discount.value = '100';
+    discount.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('#estimateTerms').value = 'Тестовое дополнительное условие';
+    document.querySelector('.modal [data-act="save"]').click();
+    await wait(() => !document.querySelector('.modal'), 6000);
+    await wait(() => document.querySelector('#view').innerText.includes('Тестовое дополнительное условие'), 4000);
+    return { ok: true, terms: document.querySelector('#view').innerText.includes('Тестовое дополнительное условие') };
+  `);
+  check(flow.ok, 'Смета: сохранение условий и скидки');
 
   // ── сценарий: расход
   await goto('#/expenses', 500);

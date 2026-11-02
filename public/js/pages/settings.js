@@ -31,7 +31,11 @@ export const settingsPage = {
 })`;
 
     return `
-      ${pageHead({ title: 'Настройки', subtitle: 'Компания, услуги, интеграции и данные' })}
+      ${pageHead({ title: 'Настройки', subtitle: 'Компания, услуги, документы, интеграции и данные' })}
+      ${get.storage().mode === 'ephemeral' ? `<div class="banner warn">
+        ${icon('alert')}
+        <div><b>Демо-режим Vercel.</b> Постоянное хранилище не подключено — данные могут сброситься после перезапуска. Подключите Vercel KV (Upstash Redis) в настройках проекта.</div>
+      </div>` : ''}
 
       <div class="grid two">
         <section class="card">
@@ -43,6 +47,18 @@ export const settingsPage = {
             <div class="field"><label>Сайт</label><input class="input" data-company="site" value="${esc(company.site || '')}" /></div>
             <div class="field"><label>Часы работы</label><input class="input" data-company="hours" value="${esc(company.hours || '')}" /></div>
             <div class="field span-2"><label>География</label><input class="input" data-company="address" value="${esc(company.address || '')}" /></div>
+
+            <div class="field span-2" style="margin-top:10px"><label>Юридическое лицо / ИП</label><input class="input" data-company="legal" placeholder="ИП Пленкин Р. Р." value="${esc(company.legal || '')}" /></div>
+            <div class="field"><label>ИНН</label><input class="input" data-company="inn" value="${esc(company.inn || '')}" /></div>
+            <div class="field"><label>КПП</label><input class="input" data-company="kpp" value="${esc(company.kpp || '')}" /></div>
+            <div class="field"><label>ОГРН / ОГРНИП</label><input class="input" data-company="ogrn" value="${esc(company.ogrn || '')}" /></div>
+            <div class="field"><label>Юридический адрес</label><input class="input" data-company="legalAddress" value="${esc(company.legalAddress || '')}" /></div>
+            <div class="field span-2"><label>Банк</label><input class="input" data-company="bankName" value="${esc(company.bankName || '')}" /></div>
+            <div class="field"><label>БИК</label><input class="input" data-company="bik" value="${esc(company.bik || '')}" /></div>
+            <div class="field"><label>Расчётный счёт</label><input class="input" data-company="account" value="${esc(company.account || '')}" /></div>
+            <div class="field"><label>Корр. счёт</label><input class="input" data-company="corrAccount" value="${esc(company.corrAccount || '')}" /></div>
+            <div class="field"><label>Подписант</label><input class="input" data-company="director" value="${esc(company.director || '')}" /></div>
+            <div class="field"><label>Должность подписанта</label><input class="input" data-company="directorPosition" value="${esc(company.directorPosition || '')}" /></div>
           </div>
           <div style="display:flex;justify-content:flex-end;margin-top:14px">
             <button class="btn primary" data-act="save-company">Сохранить</button>
@@ -52,7 +68,7 @@ export const settingsPage = {
         <section class="card">
           <div class="card-head"><div class="card-title">Профиль</div></div>
           <div class="field"><label>Ваше имя</label><input class="input" data-profile="name" value="${esc(get.profile().name || '')}" /></div>
-          <div class="stat-line mt"><span class="label">Версия</span><span class="value">1.0.0</span></div>
+          <div class="stat-line mt"><span class="label">Версия</span><span class="value">2.1.0</span></div>
           <div class="stat-line"><span class="label">Заказов в базе</span><span class="value">${get.orders().length}</span></div>
           <div class="stat-line"><span class="label">Лидов в базе</span><span class="value">${get.leads().length}</span></div>
           <div class="stat-line"><span class="label">Клиентов</span><span class="value">${get.clients().length}</span></div>
@@ -62,6 +78,22 @@ export const settingsPage = {
           </div>
         </section>
       </div>
+
+      <section class="card mt">
+        <div class="card-head">
+          <div><div class="card-title">Документы и гарантии</div><div class="card-sub">Подставляются в КП, смету, счёт, акт и гарантийный талон</div></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label>Срок действия КП, дней</label><input class="input" type="number" data-doc="offerDays" value="${Number(settings.documents?.offerDays) || 14}" /></div>
+          <div class="field"><label>Гарантия на материал, мес.</label><input class="input" type="number" data-doc="warrantyMaterialMonths" value="${Number(settings.documents?.warrantyMaterialMonths) || 180}" /></div>
+          <div class="field"><label>Гарантия на монтаж, мес.</label><input class="input" type="number" data-doc="warrantyInstallMonths" value="${Number(settings.documents?.warrantyInstallMonths) || 24}" /></div>
+          <div class="field span-2"><label>Условия оплаты</label><textarea class="textarea" rows="2" data-doc="paymentTerms">${esc(settings.documents?.paymentTerms || '')}</textarea></div>
+          <div class="field span-2"><label>Примечание в смете / КП</label><textarea class="textarea" rows="2" data-doc="validityNote">${esc(settings.documents?.validityNote || '')}</textarea></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:14px">
+          <button class="btn primary" data-act="save-documents">Сохранить</button>
+        </div>
+      </section>
 
       <section class="card mt">
         <div class="card-head">
@@ -195,6 +227,15 @@ export const settingsPage = {
         root.querySelectorAll('[data-company]').forEach((input) => { company[input.dataset.company] = input.value; });
         await actions.saveSettings({ company });
         toast('Данные компании сохранены', 'ok');
+      }
+
+      if (action === 'save-documents') {
+        const documents = {};
+        root.querySelectorAll('[data-doc]').forEach((input) => {
+          documents[input.dataset.doc] = input.type === 'number' ? Number(input.value) || 0 : input.value;
+        });
+        await actions.saveSettings({ documents });
+        toast('Параметры документов сохранены', 'ok');
       }
 
       if (action === 'save-profile') {

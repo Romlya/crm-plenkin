@@ -1,13 +1,15 @@
 {
   "name": "crm-plenkin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "ПЛЕНКИН CRM — лиды, заказы, оплаты и прибыль",
+  "description": "ПЛЕНКИН CRM — лиды, заказы, сметы, документы, монтажники, выплаты и прибыль",
   "main": "server.js",
   "scripts": {
     "start": "node server.js --open",
     "serve": "node server.js",
+    "dev:vercel": "node tools/vercel-dev.js",
     "test": "node tools/smoke.js http://localhost:7788",
+    "test:ui": "node tools/audit-ui.js http://localhost:7788",
     "reset-password": "node tools/reset-password.js"
   },
   "engines": {

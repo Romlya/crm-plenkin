@@ -25,6 +25,7 @@ export const dashboardPage = {
     const activity = get.activity();
     const isDemo = get.settings().demo;
     const isEmpty = !get.leads().length && !get.orders().length && !get.clients().length;
+    const storage = get.storage();
 
     const greeting = greetingForHour();
     const heroActions = `
@@ -32,6 +33,10 @@ export const dashboardPage = {
       <button class="btn primary" data-act="lead">${icon('plus')} Новый лид</button>`;
 
     return `
+      ${storage.mode === 'ephemeral' ? `<div class="banner warn">
+        ${icon('alert')}
+        <div><b>Демо-режим Vercel.</b> Постоянное хранилище не подключено: данные могут обнулиться после перезапуска функции. Подключите Vercel KV — инструкция в README.</div>
+      </div>` : ''}
       ${isDemo ? `<div class="banner">
         ${icon('sparkles')}
         <div><b>Демо-режим.</b> Здесь примеры данных, чтобы показать возможности. Когда будете готовы — очистите их в настройках.</div>

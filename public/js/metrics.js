@@ -112,7 +112,12 @@ export function metrics(from, to) {
 
   const expenses = get.expenses().filter((e) => inRange(e.date, from, to));
   const otherExpenses = sum(expenses, (e) => e.amount);
-  const profit = revenue - cogs - otherExpenses;
+
+  const laborPayouts = get.payouts().filter((p) => p.status === 'paid' && inRange(p.date, from, to));
+  const laborPaid = sum(laborPayouts, (p) => p.amount);
+
+  const grossProfit = revenue - cogs - laborPaid;
+  const profit = grossProfit - otherExpenses;
 
   const ordersCreated = get.orders().filter((o) => inRange(o.createdAt, from, to));
   const paymentsCount = payments.length;
@@ -134,12 +139,12 @@ export function metrics(from, to) {
     .reduce((acc, order) => acc + order.amount, 0);
 
   const marginPercent = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
-  const grossProfit = revenue - cogs;
 
   return {
     from, to,
     revenue,
     cogs,
+    laborPaid,
     otherExpenses,
     grossProfit,
     profit,
@@ -341,4 +346,27 @@ export function conversionFunnel(from, to) {
     { label: 'Договор', value: leads.filter((l) => ['contract', 'won'].includes(l.status)).length, percent: percent(leads.filter((l) => ['contract', 'won'].includes(l.status)).length, total) },
     { label: 'В заказ', value: leads.filter((l) => l.status === 'won').length, percent: percent(leads.filter((l) => l.status === 'won').length, total) },
   ];
+}
+
+// ───────────────────────────── монтажники и выплаты
+
+export function orderLabor(order) {
+  const assigned = (order?.installers || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+  const payouts = get.payouts().filter((p) => p.orderId === order?.id);
+  const paid = payouts.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
+  const planned = payouts.filter((p) => p.status !== 'paid').reduce((sum, p) => sum + p.amount, 0);
+  return { assigned, paid, planned, debt: Math.max(0, assigned - paid) };
+}
+
+export function payoutsSummary(from, to) {
+  const payouts = get.payouts().filter((p) => (from && to ? inRange(p.date, from, to) : true));
+  const paid = payouts.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
+  const planned = payouts.filter((p) => p.status !== 'paid').reduce((sum, p) => sum + p.amount, 0);
+  return { paid, planned, count: payouts.length };
+}
+
+export function installerList() {
+  return get.installers()
+    .map((installer) => ({ installer, ...get.installerStats(installer.id) }))
+    .sort((a, b) => b.assigned - a.assigned || a.installer.name.localeCompare(b.installer.name, 'ru'));
 }

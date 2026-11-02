@@ -64,13 +64,14 @@ export const analyticsPage = {
           <div class="card-head"><div class="card-title">P&L за период</div><span class="badge ${m.profit >= 0 ? 'green' : 'red'}">${m.profit >= 0 ? 'прибыль' : 'убыток'}</span></div>
           <div class="stat-line"><span class="label">Выручка (оплаты)</span><span class="value">${fmtMoney(m.revenue)}</span></div>
           <div class="stat-line"><span class="label">Себестоимость</span><span class="value">−${fmtMoney(m.cogs)}</span></div>
+          <div class="stat-line"><span class="label">Монтаж (выплаты)</span><span class="value">−${fmtMoney(m.laborPaid)}</span></div>
           <div class="stat-line"><span class="label">Валовая прибыль</span><span class="value">${fmtMoney(m.grossProfit)}</span></div>
           <div class="stat-line"><span class="label">Прочие расходы</span><span class="value">−${fmtMoney(m.otherExpenses)}</span></div>
           <div class="stat-line" style="border-top:1px solid var(--line-strong);padding-top:11px">
             <span class="label" style="color:var(--text);font-weight:600">Чистая прибыль</span>
             <span class="value ${m.profit >= 0 ? 'gold' : 'red'}" style="font-size:18px">${fmtMoney(m.profit)}</span>
           </div>
-          <div class="dim" style="font-size:11.5px;margin-top:10px;line-height:1.5">Себестоимость считается пропорционально оплатам по заказам. Расходы — по дате.</div>
+          <div class="dim" style="font-size:11.5px;margin-top:10px;line-height:1.5">Материалы — пропорционально оплатам по заказам. Монтаж — фактические выплаты за период. Расходы — по дате.</div>
         </section>
       </div>
 

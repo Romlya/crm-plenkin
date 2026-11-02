@@ -72,6 +72,9 @@ export function setData(snapshot) {
     payments: snapshot.payments || [],
     expenses: snapshot.expenses || [],
     tasks: snapshot.tasks || [],
+    installers: snapshot.installers || [],
+    payouts: snapshot.payouts || [],
+    storage: snapshot.storage || state.data?.storage || { mode: 'file', persistent: true },
     activity: snapshot.activity || [],
   };
   recompute();
@@ -100,6 +103,36 @@ export function recompute() {
     clientStats.set(order.clientId, stat);
   }
   state.derived = { clientsById, ordersById, servicesById, paidByOrder, clientStats };
+
+  const installersById = new Map((data.installers || []).map((i) => [i.id, i]));
+  const payoutsByOrder = new Map();
+  const installerStats = new Map();
+  for (const installer of data.installers || []) {
+    installerStats.set(installer.id, { assigned: 0, paid: 0, planned: 0, orders: 0, orderIds: new Set() });
+  }
+  for (const order of data.orders) {
+    for (const assignment of order.installers || []) {
+      const stat = installerStats.get(assignment.installerId);
+      if (!stat) continue;
+      stat.assigned += assignment.amount || 0;
+      if (!stat.orderIds.has(order.id)) {
+        stat.orderIds.add(order.id);
+        stat.orders += 1;
+      }
+    }
+  }
+  for (const payout of data.payouts || []) {
+    payoutsByOrder.set(payout.orderId, (payoutsByOrder.get(payout.orderId) || 0) + payout.amount);
+    const stat = installerStats.get(payout.installerId);
+    if (!stat) continue;
+    if (payout.status === 'paid') stat.paid += payout.amount || 0;
+    else stat.planned += payout.amount || 0;
+  }
+  for (const stat of installerStats.values()) {
+    stat.debt = Math.max(0, stat.assigned - stat.paid);
+    delete stat.orderIds;
+  }
+  Object.assign(state.derived, { installersById, payoutsByOrder, installerStats });
 }
 
 export const get = {
@@ -109,13 +142,18 @@ export const get = {
   payments: () => state.data?.payments || [],
   expenses: () => state.data?.expenses || [],
   tasks: () => state.data?.tasks || [],
+  installers: () => state.data?.installers || [],
+  payouts: () => state.data?.payouts || [],
   activity: () => state.data?.activity || [],
+  storage: () => state.data?.storage || { mode: 'file', persistent: true },
   settings: () => state.data?.settings || {},
   profile: () => state.data?.profile || { name: 'Руководитель' },
   services: () => state.data?.settings?.services || [],
   client: (id) => state.derived.clientsById?.get(id) || null,
   order: (id) => state.derived.ordersById?.get(id) || null,
   service: (id) => state.derived.servicesById?.get(id) || null,
+  installer: (id) => state.derived.installersById?.get(id) || null,
+  installerStats: (id) => state.derived.installerStats?.get(id) || { assigned: 0, paid: 0, planned: 0, orders: 0, debt: 0 },
   paid: (orderId) => state.derived.paidByOrder?.get(orderId) || 0,
   debt: (order) => Math.max(0, (order?.amount || 0) - get.paid(order?.id)),
   clientStats: (id) => state.derived.clientStats?.get(id) || { orders: 0, total: 0, paid: 0, debt: 0 },
@@ -150,6 +188,12 @@ export const actions = {
   addTask: (body) => mutate('/api/tasks', { method: 'POST', body }),
   updateTask: (id, body) => mutate(`/api/tasks/${id}`, { method: 'PATCH', body }),
   deleteTask: (id) => mutate(`/api/tasks/${id}`, { method: 'DELETE' }),
+  createInstaller: (body) => mutate('/api/installers', { method: 'POST', body }),
+  updateInstaller: (id, body) => mutate(`/api/installers/${id}`, { method: 'PATCH', body }),
+  deleteInstaller: (id) => mutate(`/api/installers/${id}`, { method: 'DELETE' }),
+  createPayout: (body) => mutate('/api/payouts', { method: 'POST', body }),
+  updatePayout: (id, body) => mutate(`/api/payouts/${id}`, { method: 'PATCH', body }),
+  deletePayout: (id) => mutate(`/api/payouts/${id}`, { method: 'DELETE' }),
   saveSettings: (body) => mutate('/api/settings', { method: 'PATCH', body }),
   rotateToken: () => mutate('/api/settings/rotate-token', { method: 'POST', body: {} }),
   clearDemo: () => mutate('/api/demo/clear', { method: 'POST', body: {} }),

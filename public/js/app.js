@@ -10,6 +10,8 @@ import { ordersPage, orderDetailPage } from './pages/orders.js';
 import { paymentsPage } from './pages/payments.js';
 import { clientsPage, clientDetailPage } from './pages/clients.js';
 import { expensesPage } from './pages/expenses.js';
+import { installersPage } from './pages/installers.js';
+import { documentPage } from './pages/documents.js';
 import { analyticsPage } from './pages/analytics.js';
 import { settingsPage } from './pages/settings.js';
 
@@ -20,6 +22,7 @@ const NAV = [
     { id: 'orders', href: '#/orders', label: 'Заказы', icon: 'orders', badge: 'activeOrders' },
     { id: 'payments', href: '#/payments', label: 'Оплаты', icon: 'payments' },
     { id: 'clients', href: '#/clients', label: 'Клиенты', icon: 'clients' },
+    { id: 'installers', href: '#/installers', label: 'Монтажники', icon: 'wrench' },
     { id: 'expenses', href: '#/expenses', label: 'Расходы', icon: 'expenses' },
   ] },
   { group: 'Анализ', items: [
@@ -33,10 +36,12 @@ const ROUTES = [
   { pattern: /^\/dashboard$/, id: 'dashboard', page: dashboardPage, title: 'Обзор' },
   { pattern: /^\/leads$/, id: 'leads', page: leadsPage, title: 'Лиды' },
   { pattern: /^\/orders$/, id: 'orders', page: ordersPage, title: 'Заказы' },
+  { pattern: /^\/orders\/([^/]+)\/doc\/([^/]+)$/, id: 'orders', page: documentPage, title: 'Документ', detail: true },
   { pattern: /^\/orders\/([^/]+)$/, id: 'orders', page: orderDetailPage, title: 'Заказ', detail: true },
   { pattern: /^\/payments$/, id: 'payments', page: paymentsPage, title: 'Оплаты' },
   { pattern: /^\/clients$/, id: 'clients', page: clientsPage, title: 'Клиенты' },
   { pattern: /^\/clients\/([^/]+)$/, id: 'clients', page: clientDetailPage, title: 'Клиент', detail: true },
+  { pattern: /^\/installers$/, id: 'installers', page: installersPage, title: 'Монтажники' },
   { pattern: /^\/expenses$/, id: 'expenses', page: expensesPage, title: 'Расходы' },
   { pattern: /^\/analytics$/, id: 'analytics', page: analyticsPage, title: 'Аналитика' },
   { pattern: /^\/settings$/, id: 'settings', page: settingsPage, title: 'Настройки' },
@@ -164,7 +169,7 @@ function parseHash() {
 function resolveRoute(path) {
   for (const route of ROUTES) {
     const match = route.pattern.exec(path);
-    if (match) return { route, params: { id: match[1] } };
+    if (match) return { route, params: { id: match[1], type: match[2] } };
   }
   return null;
 }

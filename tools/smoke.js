@@ -77,6 +77,41 @@ async function main() {
   const orderPatch = await call('PATCH', `/api/orders/${orderId}`, { cost: 5000, status: 'install' });
   assert(orderPatch.status === 200 && orderPatch.body.item.cost === 5000, 'редактирование заказа');
 
+  const estimate = await call('PATCH', `/api/orders/${orderId}`, {
+    items: [{ name: 'Плёнка', qty: 10, unit: 'м²', price: 1000, cost: 300 }],
+    discount: 500,
+  });
+  assert(estimate.status === 200 && estimate.body.item.amount === 9500, 'смета: сумма и скидка');
+  assert(estimate.body.item.cost === 3000, 'смета: себестоимость');
+
+  const installer = await call('POST', '/api/installers', { name: 'Тест Монтажник', phone: '+7 900 000-00-09', role: 'Монтажник', rateType: 'percent', rate: 20 });
+  assert(installer.status === 201 && installer.body.item.id, 'создание монтажника');
+  const installerId = installer.body.item.id;
+
+  const installerPatch = await call('PATCH', `/api/installers/${installerId}`, { rate: 25 });
+  assert(installerPatch.status === 200 && installerPatch.body.item.rate === 25, 'редактирование монтажника');
+
+  const assign = await call('PATCH', `/api/orders/${orderId}`, {
+    installers: [{ installerId, role: 'Монтажник', amount: 2000 }],
+  });
+  assert(assign.status === 200 && assign.body.item.installers.length === 1, 'назначение монтажника на заказ');
+
+  const payout = await call('POST', '/api/payouts', { orderId, installerId, amount: 1000, status: 'paid', method: 'cash' });
+  assert(payout.status === 201, 'создание выплаты');
+  const payoutId = payout.body.item.id;
+
+  const payoutPatch = await call('PATCH', `/api/payouts/${payoutId}`, { status: 'planned' });
+  assert(payoutPatch.status === 200 && payoutPatch.body.item.status === 'planned', 'статус выплаты');
+
+  const badPayout = await call('POST', '/api/payouts', { orderId, installerId, amount: 0 });
+  assert(badPayout.status === 400, 'выплата 0 ₽ отклонена');
+
+  const docs = await call('PATCH', '/api/settings', { documents: { offerDays: 21, warrantyMaterialMonths: 120 } });
+  assert(docs.status === 200 && docs.body.settings.documents.offerDays === 21, 'настройки документов');
+
+  const company = await call('PATCH', '/api/settings', { company: { inn: '7700000000', bankName: 'Тест Банк' } });
+  assert(company.status === 200 && company.body.settings.company.inn === '7700000000', 'реквизиты компании');
+
   const payment = await call('POST', '/api/payments', { orderId, amount: 6000, method: 'cash', note: 'Аванс' });
   assert(payment.status === 201, 'добавление оплаты');
 
@@ -115,6 +150,12 @@ async function main() {
 
   const delExpense = await call('DELETE', `/api/expenses/${expense.body.item.id}`);
   assert(delExpense.status === 200, 'удаление расхода');
+
+  const delPayout = await call('DELETE', `/api/payouts/${payoutId}`);
+  assert(delPayout.status === 200, 'удаление выплаты');
+
+  const delInstaller = await call('DELETE', `/api/installers/${installerId}`);
+  assert(delInstaller.status === 200, 'удаление монтажника');
 
   const delLead = await call('DELETE', `/api/leads/${leadId}`);
   assert(delLead.status === 200, 'удаление лида');

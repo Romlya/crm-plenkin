@@ -1,8 +1,8 @@
 // Формы создания/редактирования сущностей
 
-import { formModal, toast, confirmModal } from './ui.js';
+import { formModal, toast, confirmModal, openModal } from './ui.js';
 import { actions, get } from './store.js';
-import { esc, fmtMoney, fmtDate, ORDER_STATUS, LEAD_STATUS, PAYMENT_METHOD, telHref, waHref } from './util.js';
+import { esc, fmtMoney, fmtDate, fmtArea, ORDER_STATUS, LEAD_STATUS, PAYMENT_METHOD, telHref, waHref } from './util.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -208,4 +208,251 @@ export function leadContactLinks(lead) {
     <a class="btn sm" href="${waHref(lead.phone)}" target="_blank" rel="noopener">WhatsApp</a>`;
 }
 
-export { esc, fmtMoney, fmtDate };
+// ───────────────────────────── смета и условия
+
+export function openEstimateForm(order) {
+  const initial = order.items?.length
+    ? order.items.map((item) => ({ ...item }))
+    : [{
+      name: order.title,
+      qty: order.area || 1,
+      unit: 'м²',
+      price: order.area ? Math.round(order.amount / order.area) : order.amount,
+      cost: order.area ? Math.round(order.cost / order.area) : order.cost,
+    }];
+
+  const rowHtml = (item = {}) => `
+    <div class="estimate-row" data-row>
+      <input class="input" data-field="name" placeholder="Наименование" value="${esc(item.name || '')}" />
+      <input class="input" data-field="qty" type="number" step="0.1" placeholder="1" value="${esc(item.qty ?? 1)}" />
+      <input class="input" data-field="unit" placeholder="м²" value="${esc(item.unit || 'м²')}" />
+      <input class="input" data-field="price" type="number" step="1" placeholder="0" value="${esc(item.price ?? 0)}" />
+      <input class="input" data-field="cost" type="number" step="1" placeholder="0" value="${esc(item.cost ?? 0)}" title="Себестоимость за единицу" />
+      <button class="btn ghost icon sm" type="button" data-remove aria-label="Удалить строку">${'✕'}</button>
+    </div>`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      handle.close();
+      resolve(value);
+    };
+
+    const handle = openModal({
+      title: 'Смета и условия',
+      subtitle: `${order.number} · ${order.title}`,
+      size: 'wide',
+      body: `
+        <div class="estimate-grid-head">
+          <span>Наименование</span><span>Кол-во</span><span>Ед.</span><span>Цена</span><span>Себест.</span><span></span>
+        </div>
+        <div id="estimateRows">${initial.map(rowHtml).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn sm" type="button" id="addRow">+ Строка</button>
+          <span class="dim" style="font-size:12px;align-self:center">Себестоимость — за единицу, для расчёта прибыли</span>
+        </div>
+        <div class="form-grid" style="margin-top:16px">
+          <div class="field">
+            <label>Скидка, ₽</label>
+            <input class="input" id="estimateDiscount" type="number" min="0" step="1" value="${Number(order.discount) || 0}" />
+          </div>
+          <div class="field">
+            <label>Итого</label>
+            <div class="estimate-total" id="estimateTotal">0 ₽</div>
+          </div>
+          <div class="field span-2">
+            <label>Дополнительные условия (печатаются в документах)</label>
+            <textarea class="textarea" id="estimateTerms" rows="4" placeholder="Например: работы в будни с 9:00 до 18:00, пропуска оформляет заказчик">${esc(order.terms || '')}</textarea>
+          </div>
+        </div>`,
+      footer: `<div class="spacer"></div>
+        <button class="btn" data-act="cancel">Отмена</button>
+        <button class="btn primary" data-act="save">Сохранить смету</button>`,
+      onMount: (element) => {
+        const rows = element.querySelector('#estimateRows');
+        const totalNode = element.querySelector('#estimateTotal');
+        const discountNode = element.querySelector('#estimateDiscount');
+
+        const total = () => {
+          let sum = 0;
+          rows.querySelectorAll('[data-row]').forEach((row) => {
+            const qty = Number(row.querySelector('[data-field="qty"]').value) || 0;
+            const price = Number(row.querySelector('[data-field="price"]').value) || 0;
+            sum += qty * price;
+          });
+          sum -= Number(discountNode.value) || 0;
+          totalNode.textContent = fmtMoney(Math.max(0, sum));
+          return sum;
+        };
+
+        const collect = () => [...rows.querySelectorAll('[data-row]')].map((row) => ({
+          name: row.querySelector('[data-field="name"]').value.trim(),
+          qty: Number(row.querySelector('[data-field="qty"]').value) || 0,
+          unit: row.querySelector('[data-field="unit"]').value.trim() || 'м²',
+          price: Number(row.querySelector('[data-field="price"]').value) || 0,
+          cost: Number(row.querySelector('[data-field="cost"]').value) || 0,
+        })).filter((item) => item.name);
+
+        element.addEventListener('input', total);
+        element.querySelector('#addRow').addEventListener('click', () => {
+          rows.insertAdjacentHTML('beforeend', rowHtml({}));
+          total();
+        });
+        rows.addEventListener('click', (event) => {
+          if (event.target.closest('[data-remove]')) {
+            event.target.closest('[data-row]').remove();
+            total();
+          }
+        });
+        element.querySelector('[data-act="cancel"]').addEventListener('click', () => finish(null));
+        element.querySelector('[data-act="save"]').addEventListener('click', async () => {
+          const items = collect();
+          if (!items.length) {
+            toast('Добавьте хотя бы одну строку', 'err');
+            return;
+          }
+          try {
+            await actions.updateOrder(order.id, {
+              items,
+              discount: Number(discountNode.value) || 0,
+              terms: element.querySelector('#estimateTerms').value,
+              title: order.title,
+            });
+            toast('Смета сохранена', 'ok');
+            finish(true);
+          } catch (error) {
+            toast(error.message, 'err');
+          }
+        });
+        total();
+      },
+      onClose: () => {
+        if (!settled) {
+          settled = true;
+          resolve(null);
+        }
+      },
+    });
+  });
+}
+
+// ───────────────────────────── монтажники
+
+export async function openInstallerForm(installer = null) {
+  const result = await formModal({
+    title: installer ? 'Монтажник' : 'Новый монтажник',
+    fields: [
+      { name: 'name', label: 'Имя', required: true, span: 2 },
+      { name: 'phone', label: 'Телефон', type: 'tel' },
+      { name: 'role', label: 'Роль', placeholder: 'Монтажник / Бригадир' },
+      {
+        name: 'rateType', label: 'Ставка', type: 'select',
+        options: [
+          { value: 'percent', label: 'Процент от заказа' },
+          { value: 'per_m2', label: '₽ за м²' },
+          { value: 'fixed', label: 'Фиксированная' },
+        ],
+      },
+      { name: 'rate', label: 'Значение ставки', type: 'number', step: '0.1' },
+      { name: 'active', label: 'Работает', type: 'checkbox', checkLabel: 'Активен', value: true },
+      { name: 'note', label: 'Заметка', type: 'textarea', span: 2 },
+    ],
+    values: installer || { rateType: 'percent', rate: 20, active: true },
+    onSubmit: async (payload) => {
+      if (installer) {
+        await actions.updateInstaller(installer.id, payload);
+        toast('Монтажник обновлён', 'ok');
+      } else {
+        await actions.createInstaller(payload);
+        toast('Монтажник добавлен', 'ok');
+      }
+    },
+  });
+  return result;
+}
+
+export function openAssignForm(order) {
+  const assigned = new Set((order.installers || []).map((a) => a.installerId));
+  const available = get.installers().filter((i) => i.active !== false && !assigned.has(i.id));
+  if (!available.length) {
+    toast('Все активные монтажники уже назначены', 'err');
+    return Promise.resolve(null);
+  }
+  const options = available.map((i) => ({
+    value: i.id,
+    label: `${i.name} · ${i.role} · ${i.rateType === 'percent' ? `${i.rate}%` : i.rateType === 'per_m2' ? `${i.rate} ₽/м²` : `${fmtMoney(i.rate)}`}`,
+  }));
+
+  return formModal({
+    title: 'Назначить монтажника',
+    subtitle: order.number,
+    fields: [
+      { name: 'installerId', label: 'Монтажник', type: 'select', required: true, options, span: 2 },
+      { name: 'role', label: 'Роль на объекте', placeholder: 'Монтажник' },
+      { name: 'amount', label: 'Сумма к выплате, ₽', type: 'money', required: true, hint: 'Можно изменить вручную' },
+    ],
+    values: { role: 'Монтажник', amount: '' },
+    submitLabel: 'Назначить',
+    onSubmit: async (payload) => {
+      const next = [...(order.installers || []), {
+        installerId: payload.installerId,
+        role: payload.role || 'Монтажник',
+        amount: Number(payload.amount) || 0,
+      }];
+      await actions.updateOrder(order.id, { installers: next });
+      toast('Монтажник назначен', 'ok');
+    },
+  });
+}
+
+export function openPayoutForm(order, installerId = '') {
+  const installers = get.installers();
+  if (!installers.length) {
+    toast('Сначала добавьте монтажников', 'err');
+    return Promise.resolve(null);
+  }
+  const orderOptions = get.orders()
+    .filter((o) => o.status !== 'cancelled')
+    .map((o) => ({ value: o.id, label: `${o.number} · ${o.title}` }));
+
+  const options = installers.map((i) => ({ value: i.id, label: `${i.name} · ${i.role}` }));
+  const labor = order ? orderLaborLocal(order) : { assigned: 0, paid: 0, planned: 0, debt: 0 };
+
+  return formModal({
+    title: 'Выплата монтажнику',
+    fields: [
+      { name: 'orderId', label: 'Заказ', type: 'select', required: true, options: orderOptions, emptyOption: 'Выберите заказ', span: 2 },
+      { name: 'installerId', label: 'Монтажник', type: 'select', required: true, options, span: 2 },
+      { name: 'amount', label: 'Сумма, ₽', type: 'money', required: true, hint: order ? `Назначено: ${fmtMoney(labor.assigned)} · к выплате: ${fmtMoney(labor.debt)}` : '' },
+      { name: 'status', label: 'Статус', type: 'select', options: [{ value: 'paid', label: 'Выплачено' }, { value: 'planned', label: 'Запланировано' }] },
+      { name: 'date', label: 'Дата', type: 'date' },
+      { name: 'method', label: 'Способ', type: 'select', options: Object.entries(PAYMENT_METHOD).map(([value, label]) => ({ value, label })) },
+      { name: 'note', label: 'Комментарий', placeholder: 'Аванс / расчёт', span: 2 },
+    ],
+    values: {
+      orderId: order?.id || '',
+      installerId,
+      amount: labor.debt || '',
+      status: 'paid',
+      date: today(),
+      method: 'transfer',
+    },
+    submitLabel: 'Сохранить',
+    onSubmit: async (payload) => {
+      await actions.createPayout(payload);
+      toast('Выплата сохранена', 'ok');
+    },
+  });
+}
+
+function orderLaborLocal(order) {
+  const assigned = (order.installers || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+  const payouts = get.payouts().filter((p) => p.orderId === order.id);
+  const paid = payouts.filter((p) => p.status === 'paid').reduce((sum, p) => sum + p.amount, 0);
+  const planned = payouts.filter((p) => p.status !== 'paid').reduce((sum, p) => sum + p.amount, 0);
+  return { assigned, paid, planned, debt: Math.max(0, assigned - paid) };
+}
+
+export { esc, fmtMoney, fmtDate, fmtArea };

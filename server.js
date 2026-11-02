@@ -14,12 +14,20 @@ const os = require('node:os');
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const DATA_DIR = process.env.CRM_DATA_DIR ? path.resolve(process.env.CRM_DATA_DIR) : path.join(ROOT, 'data');
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || '';
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || '';
+const KV_KEY = 'plenkin:crm:db:v1';
+const KV_SECRET_KEY = 'plenkin:crm:secret:v1';
+const STORAGE_MODE = KV_URL ? 'kv' : (IS_VERCEL ? 'ephemeral' : 'file');
+const DATA_DIR = process.env.CRM_DATA_DIR
+  ? path.resolve(process.env.CRM_DATA_DIR)
+  : (IS_VERCEL ? path.join(os.tmpdir(), 'plenkin-crm') : path.join(ROOT, 'data'));
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const SECRET_FILE = path.join(DATA_DIR, 'secret.key');
 const PORT = Number(process.env.PORT || 7788);
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const SESSION_COOKIE = 'plenkin_crm';
 const SESSION_TTL = 30 * 24 * 60 * 60 * 1000;
 
@@ -111,7 +119,25 @@ function defaultSettings() {
       address: 'Москва и Московская область',
       hours: 'ежедневно 9:00–21:00',
       inn: '',
+      kpp: '',
+      ogrn: '',
       legal: 'ИП Пленкин',
+      legalAddress: '',
+      bankName: '',
+      bik: '',
+      account: '',
+      corrAccount: '',
+      director: 'Пленкин Р. Р.',
+      directorPosition: 'Индивидуальный предприниматель',
+      basis: 'Свидетельства о государственной регистрации',
+    },
+    documents: {
+      offerDays: 14,
+      warrantyMaterialMonths: 180,
+      warrantyInstallMonths: 24,
+      paymentTerms: 'Аванс 70% до поставки материала и выезда бригады, 30% — после подписания акта.',
+      deliveryTerms: 'Доставка материала и вывоз мусора включены в стоимость.',
+      validityNote: 'Смета действительна 14 календарных дней. Не является публичной офертой.',
     },
     currency: '₽',
     sources: ['Сайт', 'Телефон', 'MAX', 'WhatsApp', 'Авито', 'Рекомендация', 'Госзакупки', 'Другое'],
@@ -138,48 +164,127 @@ function emptyDb() {
     payments: [],
     expenses: [],
     tasks: [],
+    installers: [],
+    payouts: [],
     activity: [],
   };
 }
 
 let db = null;
 let saveTimer = null;
+let initialized = false;
+let kvPending = Promise.resolve();
 
-function loadDb() {
+async function kvRequest(command, body) {
+  if (!KV_URL) return null;
+  const response = await fetch(`${KV_URL}/${command}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: {
+      Authorization: `Bearer ${KV_TOKEN}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'text/plain' }),
+    },
+    body: body === undefined ? undefined : body,
+  });
+  if (!response.ok) throw new Error(`KV ${response.status}`);
+  return response.json();
+}
+
+async function kvGet(key) {
+  const data = await kvRequest(`get/${encodeURIComponent(key)}`);
+  return data?.result ?? null;
+}
+
+async function kvSet(key, value) {
+  await kvRequest(`set/${encodeURIComponent(key)}`, value);
+}
+
+function applyDb(parsed) {
+  db = { ...emptyDb(), ...parsed };
+  db.settings = { ...defaultSettings(), ...(parsed.settings || {}) };
+  db.settings.company = { ...defaultSettings().company, ...(parsed.settings?.company || {}) };
+  db.settings.documents = { ...defaultSettings().documents, ...(parsed.settings?.documents || {}) };
+  for (const key of ['clients', 'leads', 'orders', 'payments', 'expenses', 'tasks', 'installers', 'payouts', 'activity']) {
+    if (!Array.isArray(db[key])) db[key] = [];
+  }
+}
+
+function loadDbFromFile() {
+  if (!fs.existsSync(DB_FILE)) return false;
+  try {
+    applyDb(JSON.parse(fs.readFileSync(DB_FILE, 'utf8')));
+    return true;
+  } catch (error) {
+    console.error('[db] Не удалось прочитать db.json:', error.message);
+    const broken = `${DB_FILE}.broken-${Date.now()}`;
+    try { fs.copyFileSync(DB_FILE, broken); } catch { /* ignore */ }
+    console.error(`[db] Повреждённый файл сохранён как ${broken}`);
+    return false;
+  }
+}
+
+async function loadSecret() {
+  if (!KV_URL) return readSecret();
+  try {
+    const existing = await kvGet(KV_SECRET_KEY);
+    if (existing) return existing;
+    const secret = crypto.randomBytes(32).toString('hex');
+    await kvSet(KV_SECRET_KEY, secret);
+    return secret;
+  } catch (error) {
+    console.error('[kv] секрет:', error.message);
+    return readSecret();
+  }
+}
+
+async function init() {
+  if (initialized) return;
   ensureDirs();
-  SECRET = readSecret();
-  if (fs.existsSync(DB_FILE)) {
+  SECRET = await loadSecret();
+
+  if (KV_URL) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-      db = { ...emptyDb(), ...parsed };
-      db.settings = { ...defaultSettings(), ...(parsed.settings || {}) };
-      db.settings.company = { ...defaultSettings().company, ...(parsed.settings?.company || {}) };
-      for (const key of ['clients', 'leads', 'orders', 'payments', 'expenses', 'tasks', 'activity']) {
-        if (!Array.isArray(db[key])) db[key] = [];
+      const raw = await kvGet(KV_KEY);
+      if (raw) {
+        applyDb(typeof raw === 'string' ? JSON.parse(raw) : raw);
+        initialized = true;
+        return;
       }
-      return;
     } catch (error) {
-      console.error('[db] Не удалось прочитать db.json:', error.message);
-      const broken = `${DB_FILE}.broken-${Date.now()}`;
-      try { fs.copyFileSync(DB_FILE, broken); } catch { /* ignore */ }
-      console.error(`[db] Повреждённый файл сохранён как ${broken}`);
+      console.error('[kv] чтение:', error.message);
     }
   }
-  db = emptyDb();
+
+  if (!loadDbFromFile()) {
+    db = emptyDb();
+  }
   saveDb(true);
+  initialized = true;
+}
+
+function queueKvWrite(json) {
+  if (!KV_URL) return;
+  kvPending = kvPending
+    .then(() => kvSet(KV_KEY, json))
+    .catch((error) => console.error('[kv] запись:', error.message));
+}
+
+async function flushWrites() {
+  await kvPending;
 }
 
 function saveDb(immediate = false) {
   ensureDirs();
   const write = () => {
     saveTimer = null;
+    const json = JSON.stringify(db, null, 2);
     try {
       const tmp = `${DB_FILE}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(db, null, 2), 'utf8');
+      fs.writeFileSync(tmp, json, 'utf8');
       fs.renameSync(tmp, DB_FILE);
     } catch (error) {
       console.error('[db] Ошибка записи:', error.message);
     }
+    queueKvWrite(json);
   };
   if (immediate) {
     if (saveTimer) clearTimeout(saveTimer);
@@ -399,19 +504,30 @@ function nextOrderNumber() {
 function normalizeOrder(input = {}, current = null) {
   const base = current || {};
   const items = Array.isArray(input.items ?? base.items)
-    ? (input.items ?? base.items).slice(0, 50).map((item) => ({
-      name: str(item?.name, 160),
+    ? (input.items ?? base.items).slice(0, 80).map((item) => ({
+      name: str(item?.name, 200),
       qty: num(item?.qty, 1),
+      unit: str(item?.unit, 20) || 'м²',
       price: num(item?.price, 0),
       cost: num(item?.cost, 0),
     })).filter((item) => item.name)
     : [];
   const itemsSum = items.reduce((sum, item) => sum + item.qty * item.price, 0);
   const itemsCost = items.reduce((sum, item) => sum + item.qty * item.cost, 0);
-  const amount = items.length ? Math.round(itemsSum * 100) / 100 : num(input.amount ?? base.amount, 0);
+  const discount = items.length ? Math.max(0, num(input.discount ?? base.discount, 0)) : 0;
+  const amount = items.length
+    ? Math.max(0, Math.round((itemsSum - discount) * 100) / 100)
+    : num(input.amount ?? base.amount, 0);
   const cost = items.length ? Math.round(itemsCost * 100) / 100 : num(input.cost ?? base.cost, 0);
   const status = ORDER_STATUSES.includes(input.status) ? input.status : base.status || 'new';
   const title = str(input.title ?? base.title, 160) || 'Заказ';
+  const installers = Array.isArray(input.installers ?? base.installers)
+    ? (input.installers ?? base.installers).slice(0, 20).map((assignment) => ({
+      installerId: str(assignment?.installerId, 40),
+      role: str(assignment?.role, 60) || 'Монтажник',
+      amount: num(assignment?.amount, 0),
+    })).filter((assignment) => assignment.installerId)
+    : [];
   return {
     id: base.id || uid('or'),
     number: base.number || nextOrderNumber(),
@@ -423,13 +539,59 @@ function normalizeOrder(input = {}, current = null) {
     address: str(input.address ?? base.address, 240),
     amount,
     cost,
+    discount,
     status,
     deadline: isoDate(input.deadline ?? base.deadline),
     paidAt: isoDate(input.paidAt ?? base.paidAt),
     items,
+    installers,
+    terms: str(input.terms ?? base.terms, 6000),
+    warrantyMonths: num(input.warrantyMonths ?? base.warrantyMonths, 0),
+    warrantyInstallMonths: num(input.warrantyInstallMonths ?? base.warrantyInstallMonths, 0),
     note: str(input.note ?? base.note, 4000),
     createdAt: base.createdAt || isoDate(input.createdAt) || nowIso(),
     updatedAt: nowIso(),
+  };
+}
+
+function normalizeInstaller(input = {}, current = null) {
+  const base = current || {};
+  const name = str(input.name ?? base.name, 120);
+  if (!name) throw Object.assign(new Error('Укажите имя монтажника'), { status: 400 });
+  return {
+    id: base.id || uid('ins'),
+    name,
+    phone: str(input.phone ?? base.phone, 40),
+    role: str(input.role ?? base.role, 60) || 'Монтажник',
+    rateType: ['percent', 'fixed', 'per_m2'].includes(input.rateType) ? input.rateType : base.rateType || 'percent',
+    rate: num(input.rate ?? base.rate, 0),
+    active: input.active === undefined ? (base.active !== false) : Boolean(input.active),
+    note: str(input.note ?? base.note, 1000),
+    createdAt: base.createdAt || nowIso(),
+    updatedAt: nowIso(),
+  };
+}
+
+function normalizePayout(input = {}, current = null) {
+  const base = current || {};
+  const orderId = str(input.orderId ?? base.orderId, 40);
+  const installerId = str(input.installerId ?? base.installerId, 40);
+  const order = db.orders.find((o) => o.id === orderId);
+  if (!order) throw Object.assign(new Error('Заказ не найден'), { status: 400 });
+  const installer = db.installers.find((i) => i.id === installerId);
+  if (!installer) throw Object.assign(new Error('Монтажник не найден'), { status: 400 });
+  const amount = num(input.amount ?? base.amount, 0);
+  if (amount <= 0) throw Object.assign(new Error('Сумма выплаты должна быть больше нуля'), { status: 400 });
+  return {
+    id: base.id || uid('out'),
+    orderId,
+    installerId,
+    amount,
+    date: isoDate(input.date ?? base.date) || nowIso(),
+    method: ['cash', 'card', 'transfer', 'account'].includes(input.method) ? input.method : base.method || 'transfer',
+    status: input.status === 'planned' || base.status === 'planned' ? 'planned' : 'paid',
+    note: str(input.note ?? base.note, 300),
+    createdAt: base.createdAt || nowIso(),
   };
 }
 
@@ -516,17 +678,58 @@ function demoSeed() {
     { name: 'Сергей М.', phone: '+7 903 118-45-62', source: 'Другое', serviceId: 'sv_k4', area: 35, estimate: 38500, status: 'lost', comment: 'Дорого, ушёл к конкуренту.', lostReason: 'Цена' },
   ].map((lead, index) => normalizeLead({ ...lead, createdAt: dateAt(index + 1), updatedAt: dateAt(index) }));
 
+  const installers = [
+    { name: 'Сергей Субботин', phone: '+7 916 555-11-22', role: 'Бригадир', rateType: 'percent', rate: 25, note: 'Р4А, высотные работы, допуск' },
+    { name: 'Дмитрий Орлов', phone: '+7 903 222-44-55', role: 'Монтажник', rateType: 'percent', rate: 20 },
+    { name: 'Артём Белов', phone: '+7 925 777-88-99', role: 'Монтажник', rateType: 'per_m2', rate: 120 },
+  ].map((installer) => normalizeInstaller(installer));
+  db.installers.push(...installers);
+
   const orders = [
     { number: 'ПЛ-2026-0001', title: 'Солнцезащитная плёнка, офис на Тверской', clientId: clientStroy.id, serviceId: 'sv_solar', area: 60, amount: 42000, cost: 15000, status: 'closed', address: 'Москва, ул. Тверская, 18', createdAt: dateAt(150), deadline: dateAt(145) },
     { number: 'ПЛ-2026-0002', title: 'Плёнка К4, детский сад № 78', clientId: clientSchool.id, serviceId: 'sv_k4', area: 90, amount: 99000, cost: 40000, status: 'closed', address: 'Москва, ул. Строителей, 4', createdAt: dateAt(120), deadline: dateAt(115) },
     { number: 'ПЛ-2026-0003', title: 'Декоративная плёнка, клиника «Медиан»', clientId: clientClinic.id, serviceId: 'sv_decor', area: 35, amount: 26000, cost: 9000, status: 'closed', address: 'Москва, Ленинский пр-т, 42', createdAt: dateAt(90), deadline: dateAt(86) },
     { number: 'ПЛ-2026-0004', title: 'Атермальная плёнка, ЖК «Ривер Парк»', clientId: clientRiver.id, serviceId: 'sv_athermal', area: 48, amount: 38400, cost: 14000, status: 'closed', address: 'Москва, Нагатинская наб., 10', createdAt: dateAt(60), deadline: dateAt(56) },
     { number: 'ПЛ-2026-0005', title: 'Брендирование ресепшн, ТЦ «Афимолл»', clientId: clientBarista.id, serviceId: 'sv_brand', area: 25, amount: 34000, cost: 12000, status: 'closed', address: 'Москва, Пресненская наб., 2', createdAt: dateAt(35), deadline: dateAt(31) },
-    { number: 'ПЛ-2026-0006', title: 'Атермальная плёнка, ЖК «Символ»', clientId: clientAnna.id, leadId: leads[0].id, serviceId: 'sv_athermal', area: 18, amount: 14400, cost: 5200, status: 'closed', address: 'Москва, ул. Профсоюзная, 84', createdAt: dateAt(25), deadline: dateAt(21) },
-    { number: 'ПЛ-2026-0007', title: 'Противоосколочная плёнка К4, БЦ «СтройГрад»', clientId: clientStroy.id, leadId: leads[1].id, serviceId: 'sv_k4', area: 120, amount: 132000, cost: 58000, status: 'install', address: 'Москва, Пресненская наб., 12', createdAt: dateAt(20), deadline: dayAt(2) },
-    { number: 'ПЛ-2026-0008', title: 'Класс Р2А, школа № 1234', clientId: clientSchool.id, leadId: leads[2].id, serviceId: 'sv_p2a', area: 210, amount: 462000, cost: 210000, status: 'materials', address: 'Москва, ул. Новозаводская, 5', createdAt: dateAt(12), deadline: dayAt(9) },
-    { number: 'ПЛ-2026-0009', title: 'Брендирование витрины', clientId: clientBarista.id, serviceId: 'sv_brand', area: 14, amount: 17500, cost: 6300, status: 'done', address: 'Мытищи, ул. Мира, 21', createdAt: dateAt(9), deadline: dateAt(3) },
-    { number: 'ПЛ-2026-0010', title: 'Солнцезащита, дом в Одинцово', clientId: null, leadId: leads[5].id, serviceId: 'sv_solar', area: 24, amount: 15600, cost: 5100, status: 'measure', address: 'Одинцово, ул. Лесная, 7', createdAt: dateAt(5), deadline: dayAt(5) },
+    {
+      number: 'ПЛ-2026-0006', title: 'Атермальная плёнка, ЖК «Символ»', clientId: clientAnna.id, leadId: leads[0].id, serviceId: 'sv_athermal', area: 18, amount: 14400, cost: 5200, status: 'closed', address: 'Москва, ул. Профсоюзная, 84', createdAt: dateAt(25), deadline: dateAt(21),
+      items: [
+        { name: 'Плёнка атермальная ATR-20, 18 м²', qty: 18, unit: 'м²', price: 600, cost: 220 },
+        { name: 'Монтаж плёнки', qty: 18, unit: 'м²', price: 200, cost: 0 },
+      ],
+      installers: [
+        { installerId: installers[0].id, role: 'Бригадир', amount: 6000 },
+        { installerId: installers[1].id, role: 'Монтажник', amount: 4000 },
+      ],
+      terms: 'Монтаж изнутри помещения. Заказчик обеспечивает доступ к остеклению и электропитание.',
+    },
+    {
+      number: 'ПЛ-2026-0007', title: 'Противоосколочная плёнка К4, БЦ «СтройГрад»', clientId: clientStroy.id, leadId: leads[1].id, serviceId: 'sv_k4', area: 120, amount: 132000, cost: 58000, status: 'install', address: 'Москва, Пресненская наб., 12', createdAt: dateAt(20), deadline: dayAt(2),
+      items: [
+        { name: 'Плёнка защитная К4 (SB2), 120 м²', qty: 120, unit: 'м²', price: 900, cost: 400 },
+        { name: 'Монтаж плёнки, два слоя', qty: 120, unit: 'м²', price: 200, cost: 0 },
+      ],
+      installers: [
+        { installerId: installers[0].id, role: 'Бригадир', amount: 20000 },
+        { installerId: installers[1].id, role: 'Монтажник', amount: 12000 },
+        { installerId: installers[2].id, role: 'Монтажник', amount: 15000 },
+      ],
+      terms: 'Работы в будни с 9:00 до 18:00. Пропуска оформляет заказчик. Вывоз мусора включён.',
+    },
+    {
+      number: 'ПЛ-2026-0008', title: 'Класс Р2А, школа № 1234', clientId: clientSchool.id, leadId: leads[2].id, serviceId: 'sv_p2a', area: 210, amount: 462000, cost: 210000, status: 'materials', address: 'Москва, ул. Новозаводская, 5', createdAt: dateAt(12), deadline: dayAt(9),
+      items: [
+        { name: 'Плёнка защитная Р2А, 210 м²', qty: 210, unit: 'м²', price: 1800, cost: 850 },
+        { name: 'Монтаж плёнки (два слоя)', qty: 210, unit: 'м²', price: 400, cost: 0 },
+      ],
+      installers: [
+        { installerId: installers[0].id, role: 'Бригадир', amount: 40000 },
+        { installerId: installers[1].id, role: 'Монтажник', amount: 30000 },
+      ],
+      terms: 'Работы после 16:00 по согласованию с администрацией школы. Требуются сертификаты и акты по 44-ФЗ.',
+    },
+    { number: 'ПЛ-2026-0009', title: 'Брендирование витрины', clientId: clientBarista.id, serviceId: 'sv_brand', area: 14, amount: 17500, cost: 6300, status: 'done', address: 'Мытищи, ул. Мира, 21', createdAt: dateAt(9), deadline: dateAt(3), installers: [{ installerId: installers[2].id, role: 'Монтажник', amount: 5000 }] },
+    { number: 'ПЛ-2026-0010', title: 'Солнцезащита, дом в Одинцово', clientId: null, leadId: leads[5].id, serviceId: 'sv_solar', area: 24, amount: 15600, cost: 5100, status: 'measure', address: 'Одинцово, ул. Лесная, 7', createdAt: dateAt(5), deadline: dayAt(5), installers: [{ installerId: installers[1].id, role: 'Монтажник', amount: 4000 }] },
   ].map((order) => normalizeOrder(order));
   db.counters.orderSeq[String(new Date().getFullYear())] = orders.length;
   db.orders.push(...orders);
@@ -540,10 +743,23 @@ function demoSeed() {
     { orderId: orders[4].id, amount: 34000, date: dateAt(33), method: 'transfer', note: 'Оплата по счёту' },
     { orderId: orders[5].id, amount: 14400, date: dateAt(23), method: 'card', note: 'Полная оплата' },
     { orderId: orders[6].id, amount: 66000, date: dateAt(18), method: 'transfer', note: 'Аванс 50%' },
+    { orderId: orders[6].id, amount: 33000, date: dateAt(5), method: 'transfer', note: 'Вторая часть по договору' },
     { orderId: orders[7].id, amount: 92400, date: dateAt(10), method: 'account', note: 'Аванс по контракту' },
     { orderId: orders[8].id, amount: 17500, date: dateAt(7), method: 'transfer', note: 'Оплата по счёту' },
     { orderId: orders[9].id, amount: 5000, date: dateAt(3), method: 'cash', note: 'Предоплата' },
   ].map((payment) => normalizePayment(payment));
+
+  const payouts = [
+    { orderId: orders[5].id, installerId: installers[0].id, amount: 6000, date: dateAt(22), status: 'paid', method: 'transfer', note: 'Расчёт по объекту' },
+    { orderId: orders[5].id, installerId: installers[1].id, amount: 4000, date: dateAt(22), status: 'planned', method: 'cash', note: 'К выплате после акта' },
+    { orderId: orders[6].id, installerId: installers[0].id, amount: 20000, date: dateAt(14), status: 'paid', method: 'transfer', note: 'Аванс бригаде' },
+    { orderId: orders[6].id, installerId: installers[1].id, amount: 12000, date: dateAt(14), status: 'paid', method: 'cash', note: '' },
+    { orderId: orders[6].id, installerId: installers[2].id, amount: 15000, date: dateAt(1), status: 'planned', method: 'transfer', note: 'После монтажа' },
+    { orderId: orders[7].id, installerId: installers[0].id, amount: 30000, date: dateAt(8), status: 'paid', method: 'transfer', note: 'Аванс по договору' },
+    { orderId: orders[7].id, installerId: installers[1].id, amount: 30000, date: dateAt(0), status: 'planned', method: 'transfer', note: 'Вторая часть' },
+    { orderId: orders[8].id, installerId: installers[2].id, amount: 5000, date: dateAt(6), status: 'paid', method: 'cash', note: 'Полный расчёт' },
+    { orderId: orders[9].id, installerId: installers[1].id, amount: 4000, date: dateAt(0), status: 'planned', method: 'cash', note: '' },
+  ].map((payout) => normalizePayout(payout));
 
   const expenses = [
     { category: 'Аренда', amount: 28000, date: dateAt(140), note: 'Склад и офис' },
@@ -551,7 +767,6 @@ function demoSeed() {
     { category: 'Реклама', amount: 15000, date: dateAt(130), note: 'Яндекс.Директ' },
     { category: 'Реклама', amount: 12000, date: dateAt(70), note: 'Директ + карты' },
     { category: 'Аренда', amount: 28000, date: dateAt(40), note: 'Склад и офис' },
-    { category: 'Зарплата', amount: 45000, date: dateAt(20), note: 'Монтажники, смена' },
     { category: 'Транспорт', amount: 3400, date: dateAt(6), note: 'Логистика на объект' },
     { category: 'Связь', amount: 2400, date: dateAt(3), note: 'Телефония и CRM' },
   ].map((expense) => normalizeExpense(expense));
@@ -565,6 +780,7 @@ function demoSeed() {
   db.clients.push(...clients);
   db.leads.push(...leads);
   db.payments.push(...payments);
+  db.payouts.push(...payouts);
   db.expenses.push(...expenses);
   db.tasks.push(...tasks);
   db.settings.demo = true;
@@ -587,7 +803,14 @@ function snapshot() {
     payments: db.payments,
     expenses: db.expenses,
     tasks: db.tasks,
+    installers: db.installers,
+    payouts: db.payouts,
     activity: db.activity,
+    storage: {
+      mode: STORAGE_MODE,
+      persistent: STORAGE_MODE !== 'ephemeral',
+      version: VERSION,
+    },
     today: new Date().toISOString(),
   };
 }
@@ -842,6 +1065,7 @@ route('DELETE', '/api/orders/:id', async (req, res, params) => {
   if (index < 0) return fail(res, 404, 'Заказ не найден');
   const [removed] = db.orders.splice(index, 1);
   db.payments = db.payments.filter((p) => p.orderId !== removed.id);
+  db.payouts = db.payouts.filter((p) => p.orderId !== removed.id);
   logActivity('order', `Удалён заказ ${removed.number}`, removed.id);
   saveDb();
   sendJson(res, 200, { ok: true, ...snapshot() });
@@ -875,6 +1099,66 @@ route('DELETE', '/api/payments/:id', async (req, res, params) => {
   if (index < 0) return fail(res, 404, 'Платёж не найден');
   const [removed] = db.payments.splice(index, 1);
   recomputeOrder(removed.orderId);
+  saveDb();
+  sendJson(res, 200, { ok: true, ...snapshot() });
+});
+
+// монтажники
+route('POST', '/api/installers', async (req, res) => {
+  const body = await readBody(req);
+  const installer = normalizeInstaller(body);
+  db.installers.unshift(installer);
+  logActivity('installer', `Добавлен монтажник ${installer.name}`, installer.id);
+  saveDb();
+  sendJson(res, 201, { ok: true, item: installer, ...snapshot() });
+});
+
+route('PATCH', '/api/installers/:id', async (req, res, params) => {
+  const current = db.installers.find((i) => i.id === params.id);
+  if (!current) return fail(res, 404, 'Монтажник не найден');
+  const body = await readBody(req);
+  Object.assign(current, normalizeInstaller(body, current));
+  saveDb();
+  sendJson(res, 200, { ok: true, item: current, ...snapshot() });
+});
+
+route('DELETE', '/api/installers/:id', async (req, res, params) => {
+  const index = db.installers.findIndex((i) => i.id === params.id);
+  if (index < 0) return fail(res, 404, 'Монтажник не найден');
+  const [removed] = db.installers.splice(index, 1);
+  for (const order of db.orders) {
+    order.installers = (order.installers || []).filter((a) => a.installerId !== removed.id);
+  }
+  db.payouts = db.payouts.filter((p) => p.installerId !== removed.id);
+  logActivity('installer', `Удалён монтажник ${removed.name}`, removed.id);
+  saveDb();
+  sendJson(res, 200, { ok: true, ...snapshot() });
+});
+
+// выплаты монтажникам
+route('POST', '/api/payouts', async (req, res) => {
+  const body = await readBody(req);
+  const payout = normalizePayout(body);
+  db.payouts.unshift(payout);
+  const installer = db.installers.find((i) => i.id === payout.installerId);
+  logActivity('payout', `Выплата ${payout.amount.toLocaleString('ru-RU')} ₽ — ${installer?.name || ''}`, payout.id);
+  saveDb();
+  sendJson(res, 201, { ok: true, item: payout, ...snapshot() });
+});
+
+route('PATCH', '/api/payouts/:id', async (req, res, params) => {
+  const current = db.payouts.find((p) => p.id === params.id);
+  if (!current) return fail(res, 404, 'Выплата не найдена');
+  const body = await readBody(req);
+  Object.assign(current, normalizePayout(body, current));
+  saveDb();
+  sendJson(res, 200, { ok: true, item: current, ...snapshot() });
+});
+
+route('DELETE', '/api/payouts/:id', async (req, res, params) => {
+  const index = db.payouts.findIndex((p) => p.id === params.id);
+  if (index < 0) return fail(res, 404, 'Выплата не найдена');
+  db.payouts.splice(index, 1);
   saveDb();
   sendJson(res, 200, { ok: true, ...snapshot() });
 });
@@ -930,6 +1214,15 @@ route('PATCH', '/api/settings', async (req, res) => {
   if (body.company && typeof body.company === 'object') {
     for (const key of Object.keys(settings.company)) {
       if (key in body.company) settings.company[key] = str(body.company[key], 200);
+    }
+  }
+  if (body.documents && typeof body.documents === 'object') {
+    for (const key of Object.keys(settings.documents)) {
+      if (!(key in body.documents)) continue;
+      const current = settings.documents[key];
+      settings.documents[key] = typeof current === 'number'
+        ? Math.max(0, num(body.documents[key], current))
+        : str(body.documents[key], 500);
     }
   }
   if (Array.isArray(body.services)) {
@@ -1176,7 +1469,9 @@ function serveStatic(req, res, pathname) {
 
 // ─────────────────────────────────────────────────────────────── сервер
 
-const server = http.createServer(async (req, res) => {
+const server = http.createServer((req, res) => handleRequest(req, res));
+
+async function handleRequest(req, res) {
   const started = Date.now();
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname;
@@ -1225,11 +1520,12 @@ const server = http.createServer(async (req, res) => {
     if (status >= 500) console.error('[api]', req.method, pathname, error);
     if (!res.headersSent) fail(res, status, error.message || 'Внутренняя ошибка');
   } finally {
+    await flushWrites();
     if (process.env.CRM_LOG === '1') {
       console.log(`${req.method} ${pathname} ${res.statusCode} ${Date.now() - started}ms`);
     }
   }
-});
+}
 
 function localAddresses() {
   const out = [];
@@ -1278,5 +1574,13 @@ function start(port, attempt = 0) {
 }
 
 ensureDirs();
-loadDb();
-start(PORT);
+if (require.main === module) {
+  init()
+    .then(() => start(PORT))
+    .catch((error) => {
+      console.error('Не удалось запустить сервер:', error);
+      process.exit(1);
+    });
+}
+
+module.exports = { handleRequest, init, flushWrites, VERSION, STORAGE_MODE };

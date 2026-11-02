@@ -5,7 +5,9 @@ import {
   esc, icon, fmtMoney, fmtArea, fmtDate, statusBadge, ORDER_STATUS, PAYMENT_METHOD, methodLabel, telHref, daysLeft, plural,
 } from '../util.js';
 import { emptyState, pageHead, progressBar, toast, confirmModal, formModal } from '../ui.js';
-import { openOrderForm, openPaymentForm, deleteEntity } from '../forms.js';
+import { openOrderForm, openPaymentForm, deleteEntity, openEstimateForm, openAssignForm, openPayoutForm } from '../forms.js';
+import { orderLabor } from '../metrics.js';
+import { DOC_TYPES } from '../documents.js';
 
 function paid(order) {
   return get.paid(order.id);
@@ -141,11 +143,16 @@ export const orderDetailPage = {
     const service = get.service(order.serviceId);
     const paidSum = paid(order);
     const debt = Math.max(0, order.amount - paidSum);
-    const margin = order.amount - order.cost;
+    const labor = orderLabor(order);
+    const margin = order.amount - order.cost - labor.assigned;
     const marginPercent = order.amount > 0 ? Math.round((margin / order.amount) * 100) : 0;
     const payments = get.payments().filter((p) => p.orderId === order.id).sort((a, b) => new Date(b.date) - new Date(a.date));
     const left = daysLeft(order.deadline);
     const overdue = left !== null && left < 0 && !['done', 'closed', 'cancelled'].includes(order.status);
+    const items = order.items || [];
+    const assignments = (order.installers || [])
+      .map((assignment) => ({ ...assignment, installer: get.installer(assignment.installerId) }))
+      .filter((assignment) => assignment.installer);
 
     return `
       <div style="margin-bottom:16px">
@@ -191,6 +198,32 @@ export const orderDetailPage = {
             </dl>
           </section>
 
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Смета и условия</div>
+                <div class="card-sub">${items.length ? `${items.length} позиций · скидка ${fmtMoney(order.discount || 0)}` : 'позиции не заполнены'}</div>
+              </div>
+              <button class="btn sm" data-act="estimate">${icon('edit')} ${items.length ? 'Изменить' : 'Заполнить'}</button>
+            </div>
+            ${items.length ? `<div class="table-wrap">
+              <table class="mini-table">
+                <thead><tr><th>Наименование</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+                <tbody>
+                  ${items.map((item) => `
+                    <tr>
+                      <td>${esc(item.name)}</td>
+                      <td class="doc-center">${item.qty} ${esc(item.unit || '')}</td>
+                      <td class="doc-right">${fmtMoney(item.price)}</td>
+                      <td class="doc-right">${fmtMoney(item.qty * item.price)}</td>
+                    </tr>`).join('')}
+                </tbody>
+                <tfoot><tr><td colspan="3" class="doc-right">Итого</td><td class="doc-right"><b>${fmtMoney(order.amount)}</b></td></tr></tfoot>
+              </table>
+            </div>` : '<div class="dim" style="font-size:13px">Заполните смету — она попадёт в КП, счёт, акт и гарантийный талон.</div>'}
+            ${order.terms ? `<div class="terms-box"><span class="dim">Доп. условия:</span> ${esc(order.terms)}</div>` : ''}
+          </section>
+
           <section class="card flush">
             <div class="topper">
               <span class="topper-title">Оплаты · ${fmtMoney(paidSum)}</span>
@@ -225,6 +258,46 @@ export const orderDetailPage = {
             <div class="stat-line"><span class="label">Сумма по клиенту</span><span class="value">${fmtMoney(get.clientStats(client.id).total)}</span></div>
             <div class="stat-line"><span class="label">Долг</span><span class="value ${get.clientStats(client.id).debt ? 'red' : ''}">${fmtMoney(get.clientStats(client.id).debt)}</span></div>
           </section>` : ''}
+
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Монтажники</div>
+                <div class="card-sub">${assignments.length ? `${assignments.length} человек · ${fmtMoney(labor.assigned)}` : 'не назначены'}</div>
+              </div>
+              <button class="btn sm" data-act="assign">${icon('plus')} Назначить</button>
+            </div>
+            ${assignments.length ? `<div class="assign-list">
+              ${assignments.map((assignment) => `
+                <div class="assign-item">
+                  <span class="avatar sm">${esc(initialsOf(assignment.installer.name))}</span>
+                  <div style="min-width:0;flex:1">
+                    <div class="assign-name">${esc(assignment.installer.name)}</div>
+                    <div class="assign-role">${esc(assignment.role || assignment.installer.role || 'Монтажник')}</div>
+                  </div>
+                  <div class="assign-sum">${fmtMoney(assignment.amount)}</div>
+                  <button class="btn ghost icon sm" data-remove-installer="${assignment.installerId}" aria-label="Снять">${icon('x')}</button>
+                </div>`).join('')}
+            </div>` : '<div class="dim" style="font-size:13px">Назначьте бригаду на объект, чтобы вести выплаты.</div>'}
+            <div class="stat-line" style="margin-top:10px"><span class="label">Назначено</span><span class="value">${fmtMoney(labor.assigned)}</span></div>
+            <div class="stat-line"><span class="label">Выплачено</span><span class="value green">${fmtMoney(labor.paid)}</span></div>
+            <div class="stat-line"><span class="label">Осталось выплатить</span><span class="value ${labor.debt ? 'gold' : ''}">${fmtMoney(labor.debt)}</span></div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <button class="btn sm" data-act="payout">${icon('wallet')} Выплата</button>
+              <a class="btn sm" href="#/installers">Все монтажники →</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div class="card-title">Документы</div><a class="card-link" href="#/orders/${order.id}/doc/kp">Открыть КП →</a></div>
+            <div class="doc-buttons">
+              ${Object.entries(DOC_TYPES).map(([key, type]) => `
+                <a class="doc-button" href="#/orders/${order.id}/doc/${key}">
+                  <span class="doc-button-icon">${icon(type.icon)}</span>
+                  <span>${esc(type.title)}</span>
+                </a>`).join('')}
+            </div>
+          </section>
 
           <section class="card">
             <div class="card-head"><div class="card-title">Действия</div></div>
@@ -266,6 +339,26 @@ export const orderDetailPage = {
       if (action === 'delete') {
         const ok = await deleteEntity('order', order);
         if (ok) location.hash = '#/orders';
+      }
+      if (action === 'estimate') {
+        await openEstimateForm(order);
+        rerender();
+      }
+      if (action === 'assign') {
+        await openAssignForm(order);
+        rerender();
+      }
+      if (action === 'payout') {
+        await openPayoutForm(order);
+        rerender();
+      }
+      const removeInstallerId = event.target.closest('[data-remove-installer]')?.dataset.removeInstaller;
+      if (removeInstallerId) {
+        await actions.updateOrder(order.id, {
+          installers: (order.installers || []).filter((assignment) => assignment.installerId !== removeInstallerId),
+        });
+        toast('Монтажник снят с объекта', 'ok');
+        rerender();
       }
       const paymentId = event.target.closest('[data-del-payment]')?.dataset.delPayment;
       if (paymentId) {
