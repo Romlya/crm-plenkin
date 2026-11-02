@@ -1,8 +1,6 @@
-const fs = require('fs');
-const path = require('path');
 const zlib = require('zlib');
-const parts = [0,1,2,3].map(i => fs.readFileSync(path.join(__dirname, 'ah' + i + '.txt'), 'utf8'));
-const code = zlib.gunzipSync(Buffer.from(parts.join(''), 'base64')).toString('utf8');
+const b64 = [0,1,2,3].map(i => require('./ah' + i)).join('');
+const code = zlib.gunzipSync(Buffer.from(b64, 'base64')).toString('utf8');
 const Module = require('module');
 const m = new Module(__filename + '.rt');
 m.filename = __filename + '.rt';
