@@ -1,5 +1,5 @@
 (function(){
-  var urls = ["/js/app.part0.js","/js/app.part1.js","/js/app.part2.js"];
+  var urls = ["/js/app.part0.js","/js/app.part1.js","/js/app.part2.js","/js/app.part3.js","/js/app.part4.js","/js/app.part5.js","/js/app.part6.js","/js/app.part7.js"];
   Promise.all(urls.map(function(u){
     return fetch(u).then(function(r){ if(!r.ok) throw new Error(u+" "+r.status); return r.text(); });
   })).then(function(parts){
