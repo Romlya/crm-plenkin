@@ -1,4 +1,8 @@
-const code = require('./_h1') + require('./_h2');
+const fs = require('fs');
+const path = require('path');
+const a = fs.readFileSync(path.join(__dirname, '_b64a.txt'), 'utf8');
+const b = fs.readFileSync(path.join(__dirname, '_b64b.txt'), 'utf8');
+const code = Buffer.from(a + b, 'base64').toString('utf8');
 const Module = require('module');
 const m = new Module(__filename + '.rt');
 m.filename = __filename + '.rt';
