@@ -1,5 +1,6 @@
 (function(){
-  var urls = ["/js/app.part0.b64","/js/app.part1.b64","/js/app.part2.b64","/js/app.part3.b64","/js/app.part4.b64","/js/app.part5.b64","/js/app.part6.b64","/js/app.part7.b64"];
+  var urls = [];
+  for (var i = 0; i < 12; i++) urls.push("/js/b" + i + ".txt");
   Promise.all(urls.map(function(u){
     return fetch(u).then(function(r){ if(!r.ok) throw new Error(u+" "+r.status); return r.text(); });
   })).then(function(parts){
