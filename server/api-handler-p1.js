@@ -1,1 +1,1 @@
-PLACEHOLDER1
+module.exports = 'PTEfcfA5kS9j6PgqunhSZTxWEbQVbT7Qi1bj54j65cJ0+qhIrMIp+Gn3CtAprHZR1Tz56ccuxwkTnDXNPNzffzHxwICLqnj2MKqivO57RAvV2RwHQq3lhG+JCasdp';
