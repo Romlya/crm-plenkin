@@ -1,13 +1,10 @@
 (function(){
-  var urls = [];
-  for (var i = 0; i < 10; i++) urls.push("/js/app.full." + i + ".js");
-  Promise.all(urls.map(function(u){
-    return fetch(u).then(function(r){ if(!r.ok) throw new Error(u + " " + r.status); return r.text(); });
-  })).then(function(parts){
-    (0,eval)(parts.join(""));
-  }).catch(function(e){
-    console.error(e);
-    var el = document.getElementById("page-dashboard");
-    if(el) el.innerHTML = "<div class=\"empty-hint\">Ошибка загрузки JS: " + (e.message||e) + "</div>";
-  });
+  fetch("/js/app.bundle.js")
+    .then(function(r){ if(!r.ok) throw new Error("app.bundle.js "+r.status); return r.text(); })
+    .then(function(code){ (0,eval)(code); })
+    .catch(function(e){
+      console.error(e);
+      var el = document.getElementById("page-dashboard");
+      if(el) el.innerHTML = "<div class=\"empty-hint\">Ошибка загрузки JS: " + (e.message||e) + "<br>Обновите деплой: нужен /js/app.bundle.js</div>";
+    });
 })();
