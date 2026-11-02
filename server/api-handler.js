@@ -1,1 +1,10 @@
-PLACEHOLDER
+const parts = [];
+for (let i = 0; i < 3; i++) parts.push(require('./_ah_part' + i));
+const code = parts.join('');
+const Module = require('module');
+const path = require('path');
+const m = new Module(__filename + '.runtime');
+m.filename = __filename + '.runtime';
+m.paths = Module._nodeModulePaths(__dirname);
+m._compile(code, m.filename);
+module.exports = m.exports;
