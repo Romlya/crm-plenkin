@@ -1,10 +1,16 @@
 {
   "name": "crm-plenkin",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "CRM ПЛЕНКИН",
+  "description": "ПЛЕНКИН CRM — лиды, заказы, оплаты и прибыль",
+  "main": "server.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server.js --open",
+    "serve": "node server.js",
+    "test": "node tools/smoke.js http://localhost:7788",
+    "reset-password": "node tools/reset-password.js"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
